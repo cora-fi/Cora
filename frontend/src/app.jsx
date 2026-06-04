@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
 import { Sidebar, BottomBar, MobileHeader } from './shell';
 import Onboarding  from './screens/Onboarding';
 import Dashboard   from './screens/Dashboard';
@@ -8,12 +9,29 @@ import Solicitar   from './screens/Solicitar';
 import Solicitudes from './screens/Solicitudes';
 import Fondo       from './screens/Fondo';
 import Validador   from './screens/Validador';
+import { connect, disconnect } from './services/wallet-service';
+import { getMember } from './services/mock-service';
+
+const PRIVY_ENABLED = !!import.meta.env.VITE_PRIVY_APP_ID;
+
+// Escucha el estado de Privy y llama a onAuthenticated cuando el usuario se autentica.
+// Sólo se renderiza cuando PRIVY_ENABLED — garantiza que PrivyProvider está en el árbol.
+function PrivyAuthWatcher({ member, onAuthenticated }) {
+  const { ready, authenticated, user, logout } = usePrivy();
+  useEffect(() => {
+    if (ready && authenticated && user && !member) {
+      onAuthenticated(user, logout);
+    }
+  }, [ready, authenticated, user, member]); // eslint-disable-line
+  return null;
+}
 
 export default function App() {
   const [member,    setMember]    = useState(null);
   const [route,     setRoute]     = useState('dashboard');
   const [validador, setValidador] = useState(false);
   const [isMobile,  setIsMobile]  = useState(window.innerWidth < 900);
+  const privyLogoutRef = useRef(null); // guarda el fn logout de Privy sin re-render
 
   useEffect(() => {
     const on = () => setIsMobile(window.innerWidth < 900);
@@ -26,16 +44,49 @@ export default function App() {
     if (saved) setRoute(saved);
   }, []);
 
-  const go = (r) => {
+  const go = useCallback((r) => {
     setRoute(r);
     sessionStorage.setItem('cora_route', r);
     window.scrollTo({ top: 0 });
-  };
+  }, []);
 
-  const onLogin  = (m) => { setMember(m); go('dashboard'); };
-  const onLogout = ()  => { setMember(null); setRoute('dashboard'); sessionStorage.removeItem('cora_route'); };
+  const onLogin = useCallback((m) => {
+    setMember(m);
+    go('dashboard');
+  }, [go]);
 
-  if (!member) return <Onboarding onLogin={onLogin} />;
+  const onLogout = useCallback(async () => {
+    disconnect();
+    if (privyLogoutRef.current) {
+      try { await privyLogoutRef.current(); } catch { /* ignora */ }
+      privyLogoutRef.current = null;
+    }
+    setMember(null);
+    setRoute('dashboard');
+    sessionStorage.removeItem('cora_route');
+  }, []);
+
+  const handlePrivyAuth = useCallback(async (privyUser, privyLogoutFn) => {
+    privyLogoutRef.current = privyLogoutFn;
+    try {
+      const { address } = await connect('privy', privyUser);
+      const m = await getMember(address);
+      onLogin({ ...m, address });
+    } catch (e) {
+      console.error('Error conectando wallet Privy:', e);
+    }
+  }, [onLogin]);
+
+  if (!member) {
+    return (
+      <>
+        {PRIVY_ENABLED && (
+          <PrivyAuthWatcher member={member} onAuthenticated={handlePrivyAuth} />
+        )}
+        <Onboarding onLogin={onLogin} />
+      </>
+    );
+  }
 
   const common = { member, go };
   const screen = (() => {

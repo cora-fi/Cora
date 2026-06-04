@@ -91,7 +91,14 @@ export function Sidebar({ route, go, member, validador, setValidador, onLogout }
             <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {member?.nombre || '—'}
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-2)' }}>Miembro · Cora</div>
+            {member?.address && (
+              <div style={{ fontSize: 11, color: 'var(--ink-2)', fontFamily: 'var(--mono)', letterSpacing: '.01em' }}>
+                {member.address.slice(0, 4)}…{member.address.slice(-4)}
+              </div>
+            )}
+            {!member?.address && (
+              <div style={{ fontSize: 11.5, color: 'var(--ink-2)' }}>Miembro · Cora</div>
+            )}
           </div>
           <button onClick={onLogout} title="Salir" style={{ background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--ink-2)', padding: 4, display: 'grid', placeItems: 'center' }}>
@@ -130,6 +137,7 @@ export function BottomBar({ route, go }) {
 }
 
 export function MobileHeader({ member, onLogout }) {
+  const addr = member?.address;
   return (
     <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -137,9 +145,18 @@ export function MobileHeader({ member, onLogout }) {
       position: 'sticky', top: 0, zIndex: 40,
     }}>
       <CoraMark size={22} />
-      <button onClick={onLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)' }}>
-        <Icon name="sign-out" size={20} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {addr && (
+          <span style={{ fontSize: 11, color: 'var(--ink-2)', fontFamily: 'var(--mono)',
+            background: 'var(--canvas)', border: '1px solid var(--hairline)',
+            borderRadius: 99, padding: '3px 9px', letterSpacing: '.01em' }}>
+            {addr.slice(0, 4)}…{addr.slice(-4)}
+          </span>
+        )}
+        <button onClick={onLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-2)' }}>
+          <Icon name="sign-out" size={20} />
+        </button>
+      </div>
     </header>
   );
 }

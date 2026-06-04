@@ -89,7 +89,8 @@ export async function login() {
 // ---------------------------------------------------------------------------
 export async function getMember(address = 'GBXYZ_DEMO') {
   await wait(lat());
-  return clone(_db.members[address] ?? _db.members['GBXYZ_DEMO']);
+  const base = clone(_db.members[address] ?? _db.members['GBXYZ_DEMO']);
+  return { ...base, address }; // devuelve siempre la dirección real del caller
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,8 @@ export async function getHospitals() {
 // ---------------------------------------------------------------------------
 export async function getContributions(address = 'GBXYZ_DEMO') {
   await wait(lat());
+  // En producción filtrar por address; aquí retornamos datos globales del mock
+  void address;
   return clone(_db.contributions);
 }
 
@@ -129,6 +132,7 @@ export async function getContributions(address = 'GBXYZ_DEMO') {
 // ---------------------------------------------------------------------------
 export async function getClaims(address = 'GBXYZ_DEMO') {
   await wait(lat());
+  void address;
   return clone(_db.claims);
 }
 
