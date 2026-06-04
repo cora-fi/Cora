@@ -3,18 +3,451 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cora — Tu fondo mutual de salud</title>
+  <title>Cora — Salí de la fila. Entre todos.</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css" />
+
+  <style>
+    /* ---- tokens del sistema de diseño ---- */
+    :root {
+      --canvas:      #F3EFE6; --surface:     #FBF8F1;
+      --ink:         #20201C; --ink-2:       #6C6557;
+      --forest:      #1E4A3C; --forest-dark: #143328; --forest-soft: #E2EAE2;
+      --clay:        #C25A3E; --clay-soft:   #F0DACE; --amber: #D99A4E;
+      --hairline:    #E3DCCD;
+      --r: 10px; --r-sm: 7px;
+      --serif: "Fraunces", Georgia, serif;
+      --sans:  "Hanken Grotesk", system-ui, sans-serif;
+      --mono:  "IBM Plex Mono", ui-monospace, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; background: var(--canvas); color: var(--ink);
+      font-family: var(--sans); font-size: 16px; line-height: 1.5;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+      opacity: .035; mix-blend-mode: multiply;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    h1,h2,h3,h4 { font-family: var(--serif); font-weight: 500; font-optical-sizing: auto;
+      letter-spacing: -.01em; line-height: 1.08; margin: 0; color: var(--ink); }
+    .tnum { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+    *::-webkit-scrollbar { width: 10px; } *::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 99px; border: 3px solid var(--canvas); }
+    :focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; border-radius: 4px; }
+
+    /* ---- landing ---- */
+    html { scroll-behavior: smooth; overflow-x: clip; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(22px, 5vw, 64px); }
+
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(243,239,230,.82);
+      backdrop-filter: saturate(1.2) blur(6px); border-bottom: 1px solid transparent; transition: border-color .3s; }
+    .nav.scrolled { border-color: var(--hairline); }
+    .nav-in { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; }
+    .brand b { font-family: var(--serif); font-weight: 600; font-size: 23px; letter-spacing: -.02em; }
+
+    .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: var(--r);
+      font-family: var(--sans); font-weight: 600; font-size: 15.5px; cursor: pointer; text-decoration: none;
+      white-space: nowrap; border: 1px solid transparent; transition: background .16s, color .16s, border-color .16s; }
+    .btn-primary { background: var(--forest); color: #F3EFE6; }
+    .btn-primary:hover { background: var(--forest-dark); }
+    .btn-ghost { color: var(--ink); border-color: var(--hairline); background: transparent; }
+    .btn-ghost:hover { background: var(--surface); border-color: #cfc6b2; }
+    .btn-clay { background: var(--clay); color: #FBF8F1; }
+    .btn-clay:hover { background: #a8492f; }
+    .btn-cream { background: #F3EFE6; color: var(--forest-dark); }
+    .btn-cream:hover { background: #fff; }
+    .link-quiet { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 15px;
+      display: inline-flex; align-items: center; gap: 6px; }
+    .link-quiet:hover { color: var(--forest); }
+    .eyebrow-lg { font-family: var(--sans); font-size: 13px; font-weight: 600; letter-spacing: .16em;
+      text-transform: uppercase; color: var(--ink-2); }
+    section { position: relative; }
+    .pad-y { padding: clamp(72px, 11vh, 150px) 0; }
+
+    .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: clamp(28px, 5vw, 72px); align-items: center; }
+    .hero h1 { font-size: clamp(38px, 5vw, 72px); line-height: 1.0; letter-spacing: -.022em; max-width: 15ch; }
+    .hero .lede { font-size: clamp(18px, 2.1vw, 23px); color: var(--ink-2); max-width: 46ch; line-height: 1.55; margin-top: 30px; }
+    .hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 40px; }
+    .hero-meta { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 64px; padding-top: 30px; border-top: 1px solid var(--hairline); }
+    .hero-meta .n { font-family: var(--serif); font-size: 30px; font-weight: 500; }
+    .hero-meta .l { font-size: 13.5px; color: var(--ink-2); margin-top: 2px; }
+    .hero-art { position: relative; align-self: center; }
+    .hero-art svg { width: 100%; height: auto; display: block; overflow: visible; }
+    @media (max-width: 880px) {
+      .hero-grid { grid-template-columns: 1fr; gap: clamp(20px, 6vw, 40px); }
+      .hero-art { max-width: 360px; margin: 8px auto 0; order: 3; }
+    }
+
+    .dark { background: var(--forest); color: #EDE7D8; }
+    .dark .eyebrow-lg { color: rgba(237,231,216,.6); }
+    .stat-big { display: grid; grid-template-columns: minmax(0,auto) 1fr; gap: clamp(20px, 4vw, 56px);
+      align-items: baseline; padding: clamp(26px,4vw,42px) 0; border-bottom: 1px solid rgba(237,231,216,.16); }
+    .stat-big:last-child { border-bottom: none; }
+    .stat-big .num { font-family: var(--serif); font-weight: 500; color: #FBF8F1;
+      font-size: clamp(52px, 9vw, 120px); line-height: .9; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .stat-big .desc { font-size: clamp(16px, 1.7vw, 20px); color: rgba(237,231,216,.82); line-height: 1.45; max-width: 30ch; }
+    .stat-big .desc b { color: #F0DACE; font-weight: 600; }
+
+    .brecha p { font-family: var(--serif); font-size: clamp(26px, 3.6vw, 46px); line-height: 1.22;
+      letter-spacing: -.015em; max-width: 22ch; font-weight: 400; }
+    .brecha .accent { color: var(--clay); }
+    .brecha .note { font-family: var(--sans); font-size: 16px; color: var(--ink-2); max-width: 44ch; margin-top: 28px; line-height: 1.6; }
+
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(18px, 2.4vw, 30px); margin-top: 52px; }
+    .step { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r); padding: clamp(24px, 2.6vw, 34px); }
+    .step .idx { font-family: var(--mono); font-size: 13px; color: var(--clay); font-weight: 500; }
+    .step .ico { width: 50px; height: 50px; border-radius: var(--r); background: var(--forest-soft);
+      display: grid; place-items: center; margin: 18px 0 18px; }
+    .step h3 { font-size: 22px; line-height: 1.2; }
+    .step p { color: var(--ink-2); font-size: 15.5px; line-height: 1.55; margin-top: 10px; }
+
+    .trust { display: grid; grid-template-columns: 1fr; gap: 28px; }
+    .trust .beat { display: flex; align-items: center; gap: 18px; }
+    .trust .heart { width: 64px; height: 64px; border-radius: 99px; background: var(--clay-soft);
+      display: grid; place-items: center; flex-shrink: 0; }
+    .trust p { font-family: var(--serif); font-size: clamp(24px, 3.2vw, 40px); line-height: 1.28;
+      letter-spacing: -.012em; max-width: 24ch; font-weight: 400; }
+
+    .cierre { text-align: center; }
+    .cierre h2 { font-size: clamp(40px, 7vw, 92px); line-height: 1; letter-spacing: -.025em; color: #FBF8F1; }
+    .cierre p { color: rgba(237,231,216,.78); font-size: 18px; margin: 26px auto 0; max-width: 40ch; line-height: 1.55; }
+    .cierre .c-cta { margin-top: 42px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+    footer { padding: 40px 0 56px; }
+    .foot-in { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+      padding-top: 30px; border-top: 1px solid var(--hairline); }
+    .foot-in span { font-size: 13.5px; color: var(--ink-2); }
+
+    .moment { background: var(--canvas); min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+    .moment .wrap { width: 100%; }
+    .moment .m-title { font-size: clamp(27px, 3.6vw, 44px); line-height: 1.1; letter-spacing: -.015em; max-width: 17ch; margin: 14px 0 0; }
+    .scene-svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .bolsa-grid { display: grid; grid-template-columns: 1.02fr .98fr; gap: clamp(28px, 5vw, 72px); align-items: center; }
+    .bolsa-num { font-family: var(--serif); font-weight: 500; font-size: clamp(52px, 8vw, 100px); line-height: 1;
+      letter-spacing: -.02em; color: var(--forest); font-variant-numeric: tabular-nums; margin-top: 26px; }
+    .bolsa-cap { font-size: 15.5px; color: var(--ink-2); margin-top: 8px; }
+    .latido-wrap { text-align: center; }
+    .latido-wrap .m-title { margin: 14px auto 38px; max-width: 22ch; }
+    .latido-wrap .scene-svg { max-width: 920px; margin: 0 auto; }
+    #latido { background: var(--surface); border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+
+    @media (max-width: 820px) {
+      .steps { grid-template-columns: 1fr; }
+      .stat-big { grid-template-columns: 1fr; gap: 10px; }
+      .stat-big .desc { max-width: none; }
+      .bolsa-grid { grid-template-columns: 1fr; }
+      .bolsa-num { font-size: clamp(46px, 14vw, 72px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      [data-rise] { opacity: 1 !important; transform: none !important; }
+      .moment { min-height: auto; padding: clamp(60px, 9vh, 112px) 0; }
+    }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
+
+  <div class="nav" id="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="#top" style="text-decoration:none;color:var(--ink)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-5 3 9 2.5-7 1.6 3H22" stroke="var(--forest)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <b>Cora</b>
+      </a>
+      <a class="btn btn-ghost" href="/app.html">Ingresar <i class="ph ph-arrow-right"></i></a>
+    </div>
+  </div>
+
+  <section class="hero pad-y" id="top">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <div class="eyebrow-lg reveal" data-rise>Fondo mutual de salud · Costa Rica</div>
+          <h1 class="reveal" data-rise style="margin-top:24px">Cuando la salud no puede esperar, la resolvemos entre todos.</h1>
+          <p class="lede reveal" data-rise>Aportás una cuota mensual a un fondo común. Cuando llevás demasiado tiempo en lista de espera de la Caja, Cora co-paga tu atención en un hospital privado.</p>
+          <div class="hero-cta reveal" data-rise>
+            <a class="btn btn-primary" href="/app.html">Quiero unirme <i class="ph ph-arrow-right"></i></a>
+            <a class="btn btn-ghost" href="#como">Conocé Cora</a>
+          </div>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <svg id="heroDots" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g id="hd-lines"></g>
+            <g id="hd-dots"></g>
+          </svg>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="reveal" data-rise><div class="n tnum">$18</div><div class="l">cuota al mes</div></div>
+        <div class="reveal" data-rise><div class="n tnum">$4.000</div><div class="l">de cobertura por evento</div></div>
+        <div class="reveal" data-rise><div class="n tnum">154</div><div class="l">personas ya adentro</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dark pad-y" id="problema">
+    <div class="wrap">
+      <div class="eyebrow-lg reveal" data-rise>El problema</div>
+      <h2 class="reveal" data-rise style="color:#FBF8F1;font-size:clamp(28px,3.6vw,44px);max-width:18ch;margin:18px 0 40px;line-height:1.12">Esperar en la Caja se mide en años, no en semanas.</h2>
+      <div class="stat-big">
+        <div class="num reveal" data-rise data-count="1253790" data-format="es">1.253.790</div>
+        <div class="desc reveal" data-rise>personas <b>esperando atención</b> en la CCSS hoy.</div>
+      </div>
+      <div class="stat-big">
+        <div class="num reveal" data-rise data-count="567">567</div>
+        <div class="desc reveal" data-rise>días en promedio para <b>ver a un especialista</b>.</div>
+      </div>
+      <div class="stat-big">
+        <div class="num reveal" data-rise data-count="430">430</div>
+        <div class="desc reveal" data-rise>días en promedio para <b>una cirugía</b>.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="brecha pad-y" id="brecha">
+    <div class="wrap">
+      <div class="eyebrow-lg reveal" data-rise style="margin-bottom:28px">La brecha</div>
+      <p class="reveal" data-rise>La clase media queda atrapada: entre una <span class="accent">Caja que tarda</span> y un hospital privado que no puede pagar.</p>
+      <p class="note reveal" data-rise>Una cirugía privada cuesta entre ₡5 y ₡15 millones — dos o tres años de salario. Para la mayoría, no es una opción. Cora existe para cerrar esa brecha.</p>
+    </div>
+  </section>
+
+  <section class="pad-y" id="como" style="background:var(--canvas)">
+    <div class="wrap">
+      <div class="eyebrow-lg reveal" data-rise>Cómo funciona Cora</div>
+      <h2 class="reveal" data-rise style="font-size:clamp(28px,4vw,48px);max-width:16ch;margin-top:18px;line-height:1.08">Simple, humano y entre todos.</h2>
+      <div class="steps">
+        <div class="step reveal" data-rise>
+          <div class="idx">01</div>
+          <div class="ico"><i class="ph ph-hand-coins" style="font-size:26px;color:var(--forest)"></i></div>
+          <h3>Aportás una cuota mensual</h3>
+          <p>Una cuota accesible que entra a un fondo común, siempre a tu nombre.</p>
+        </div>
+        <div class="step reveal" data-rise>
+          <div class="idx">02</div>
+          <div class="ico"><i class="ph ph-users-three" style="font-size:26px;color:var(--forest)"></i></div>
+          <h3>El fondo crece entre todos</h3>
+          <p>Los aportes se suman y una parte genera un rendimiento prudente. El fondo es transparente.</p>
+        </div>
+        <div class="step reveal" data-rise>
+          <div class="idx">03</div>
+          <div class="ico"><i class="ph ph-first-aid-kit" style="font-size:26px;color:var(--forest)"></i></div>
+          <h3>Cuando te toca, Cora co-paga</h3>
+          <p>Si llevás demasiado en lista de espera, Cora cubre tu atención en un hospital privado de la red.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="moment" id="bolsa">
+    <div class="wrap bolsa-grid">
+      <div>
+        <div class="eyebrow-lg">El fondo común</div>
+        <h2 class="m-title">Cada aporte hace crecer la bolsa de todos.</h2>
+        <div class="bolsa-num" id="bolsaNum">$42,300</div>
+        <div class="bolsa-cap">la bolsa común, hoy</div>
+      </div>
+      <div>
+        <svg class="scene-svg" id="bolsaSvg" viewBox="0 0 440 470" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs><clipPath id="vesselClip"><path d="M114,150 L114,335 Q114,402 180,402 L260,402 Q326,402 326,335 L326,150 Z"/></clipPath></defs>
+          <path d="M110,150 L110,335 Q110,405 180,405 L260,405 Q330,405 330,335 L330,150" stroke="#1E4A3C" stroke-width="4" stroke-linecap="round"/>
+          <g clip-path="url(#vesselClip)">
+            <g class="bolsaFill">
+              <rect x="108" y="185" width="224" height="240" fill="#E2EAE2"/>
+              <rect x="108" y="185" width="224" height="5" fill="#1E4A3C" opacity="0.4"/>
+            </g>
+          </g>
+          <g class="coins">
+            <circle class="coin" cx="165" cy="382" r="12" fill="#C25A3E"/>
+            <circle class="coin" cx="202" cy="393" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="240" cy="388" r="12" fill="#C25A3E"/>
+            <circle class="coin" cx="276" cy="378" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="150" cy="358" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="190" cy="366" r="12" fill="#C25A3E"/>
+            <circle class="coin" cx="228" cy="370" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="264" cy="362" r="12" fill="#C25A3E"/>
+            <circle class="coin" cx="298" cy="352" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="172" cy="338" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="212" cy="344" r="12" fill="#C25A3E"/>
+            <circle class="coin" cx="250" cy="340" r="12" fill="#D99A4E"/>
+            <circle class="coin" cx="288" cy="332" r="12" fill="#C25A3E"/>
+            <circle class="coin" cx="232" cy="316" r="12" fill="#C25A3E"/>
+          </g>
+          <ellipse cx="220" cy="150" rx="110" ry="20" stroke="#1E4A3C" stroke-width="4" fill="#F3EFE6"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="pad-y" id="confianza" style="background:var(--surface);border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)">
+    <div class="wrap trust">
+      <div class="eyebrow-lg reveal" data-rise>Confianza</div>
+      <div class="beat reveal" data-rise>
+        <span class="heart"><i class="ph ph-heartbeat" style="font-size:32px;color:var(--clay)"></i></span>
+        <p>Como un corazón que bombea a donde el cuerpo lo necesita, Cora lleva el fondo común a quien le toca.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="moment" id="latido">
+    <div class="wrap latido-wrap">
+      <div class="eyebrow-lg">El latido</div>
+      <h2 class="m-title">Cora lleva el fondo a quien le toca.</h2>
+      <svg class="scene-svg" id="latidoSvg" viewBox="0 0 920 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path id="ecg" d="M40,160 H300 L320,160 L335,120 L350,205 L368,70 L386,210 L402,160 L420,160 H600 L660,160 L678,138 L694,182 L710,160 H880"
+              stroke="#C25A3E" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <g id="member">
+          <circle id="glow" cx="840" cy="150" r="50" fill="#E2EAE2" opacity="0.45"/>
+          <circle cx="840" cy="120" r="17" fill="#1E4A3C"/>
+          <path d="M810,184 Q840,150 870,184 L870,192 Q840,201 810,192 Z" fill="#1E4A3C"/>
+        </g>
+        <g id="heart">
+          <path d="M170,188 C170,188 126,157 126,128 C126,109 141,99 156,99 C166,99 170,108 170,116 C170,108 174,99 184,99 C199,99 214,109 214,128 C214,157 170,188 170,188 Z"
+                fill="#C25A3E" stroke="#1E4A3C" stroke-width="4" stroke-linejoin="round"/>
+        </g>
+        <circle id="flowdot" cx="215" cy="160" r="9" fill="#D99A4E" opacity="0"/>
+      </svg>
+    </div>
+  </section>
+
+  <section class="dark pad-y cierre" id="cierre">
+    <div class="wrap">
+      <h2 class="reveal" data-rise>Salí de la fila.<br>Entre todos.</h2>
+      <p class="reveal" data-rise>No es caridad ni es un seguro frío. Es un fondo que armamos entre muchos para cuando la salud no puede esperar.</p>
+      <div class="c-cta reveal" data-rise>
+        <a class="btn btn-cream" href="/app.html">Quiero unirme <i class="ph ph-arrow-right"></i></a>
+        <a class="btn btn-ghost" href="/app.html" style="color:#EDE7D8;border-color:rgba(237,231,216,.3)">Ya tengo cuenta</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-in">
+      <a class="brand" href="#top" style="text-decoration:none;color:var(--ink)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-5 3 9 2.5-7 1.6 3H22" stroke="var(--forest)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <b style="font-size:20px">Cora</b>
+      </a>
+      <span>Fondo mutual de salud · Hecho en Costa Rica · Los montos se muestran en dólares.</span>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script>
+    const nav = document.getElementById('nav');
+    addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    (function heroDots() {
+      const svg = document.getElementById('heroDots');
+      if (!svg) return;
+      const NS = 'http://www.w3.org/2000/svg';
+      const gDots = document.getElementById('hd-dots');
+      const gLines = document.getElementById('hd-lines');
+      const cx = 200, cy = 200;
+      const dots = [{ x: cx, y: cy, r: 14, c: '#C25A3E', o: 1, center: true }];
+      const rings = [{ rad: 74, n: 7, off: 0.3 }, { rad: 122, n: 9, off: 0.7 }, { rad: 168, n: 6, off: 0.15 }];
+      rings.forEach((ring) => {
+        for (let i = 0; i < ring.n; i++) {
+          const a = (i / ring.n) * Math.PI * 2 + ring.off + i * 0.6;
+          const jr = ring.rad + Math.sin(i * 3.3) * 11;
+          dots.push({ x: cx + Math.cos(a) * jr, y: cy + Math.sin(a) * jr,
+            r: 3.4 + Math.abs(Math.sin(i * 1.7 + ring.rad)) * 3.4,
+            o: 0.4 + Math.abs(Math.cos(i * 2.1 + ring.rad)) * 0.5, c: '#1E4A3C' });
+        }
+      });
+      for (let i = 1; i < dots.length; i++) {
+        for (let j = i + 1; j < dots.length; j++) {
+          const d = Math.hypot(dots[i].x - dots[j].x, dots[i].y - dots[j].y);
+          if (d < 62) {
+            const ln = document.createElementNS(NS, 'line');
+            ['x1','y1','x2','y2'].forEach((a,k) => ln.setAttribute(a, [dots[i].x,dots[i].y,dots[j].x,dots[j].y][k]));
+            ln.setAttribute('stroke','#1E4A3C'); ln.setAttribute('stroke-width','1'); ln.setAttribute('opacity','0.12');
+            gLines.appendChild(ln);
+          }
+        }
+      }
+      const els = dots.map((d) => {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx',d.x); c.setAttribute('cy',d.y); c.setAttribute('r',d.r);
+        c.setAttribute('fill',d.c); c.setAttribute('opacity',d.o);
+        gDots.appendChild(c); return { el: c, d };
+      });
+      if (reduce || !window.gsap) return;
+      els.forEach(({ el, d }) => {
+        gsap.set(el, { opacity: 0, x: d.center ? 0 : (d.x - cx) * 2.4, y: d.center ? 0 : (d.y - cy) * 2.4 });
+      });
+      gsap.set(gLines, { opacity: 0 });
+      gsap.to(els.map(e => e.el), { opacity: (i) => els[i].d.o, x: 0, y: 0,
+        duration: 1.5, ease: 'power2.out', stagger: { each: 0.035, from: 'random' }, onComplete: idle });
+      gsap.to(gLines, { opacity: 1, duration: 0.9, delay: 0.9 });
+      function idle() {
+        gsap.to(gDots, { scale: 1.02, transformOrigin: '200px 200px', repeat: -1, yoyo: true, duration: 5, ease: 'sine.inOut' });
+        gsap.to(gLines, { scale: 1.02, transformOrigin: '200px 200px', repeat: -1, yoyo: true, duration: 5, ease: 'sine.inOut' });
+        els.forEach(({ el, d }, i) => {
+          if (d.center) return;
+          gsap.to(el, { y: Math.sin(i)*3, x: Math.cos(i*1.4)*3, repeat: -1, yoyo: true, duration: 4+(i%4)*.7, ease: 'sine.inOut', delay: i*.05 });
+        });
+      }
+    })();
+
+    const fmt = (n, mode) => mode === 'es'
+      ? Math.round(n).toLocaleString('es-CR').replace(/ /g, '.')
+      : Math.round(n).toLocaleString('en-US');
+    function countUp(el) {
+      const target = +el.dataset.count, mode = el.dataset.format, dur = 1400, t0 = performance.now();
+      const id = setInterval(() => {
+        const p = Math.min(1, (performance.now() - t0) / dur);
+        el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)), mode);
+        if (p >= 1) { el.textContent = fmt(target, mode); clearInterval(id); }
+      }, 28);
+    }
+
+    if (window.gsap && window.ScrollTrigger && !reduce) {
+      gsap.registerPlugin(ScrollTrigger);
+      const build = () => {
+        document.querySelectorAll('section, footer').forEach((sec) => {
+          const items = sec.querySelectorAll('[data-rise]');
+          if (!items.length) return;
+          gsap.from(items, { opacity: 0, y: 24, duration: 0.6, ease: 'power2.out', stagger: 0.09,
+            scrollTrigger: { trigger: sec, start: 'top 80%', toggleActions: 'play none none none' } });
+        });
+        document.querySelectorAll('[data-count]').forEach((el) => {
+          ScrollTrigger.create({ trigger: el, start: 'top 88%', once: true,
+            onEnter: () => { el.textContent = fmt(0, el.dataset.format); countUp(el); } });
+        });
+        if (document.getElementById('bolsa')) {
+          const numEl = document.getElementById('bolsaNum');
+          const counter = { val: 0 };
+          if (numEl) numEl.textContent = '$0';
+          const tlB = gsap.timeline({ scrollTrigger: { trigger: '#bolsa', start: 'top top', end: '+=120%', pin: true, scrub: 1, anticipatePin: 1 } });
+          tlB.fromTo('#bolsa .bolsaFill', { y: 225 }, { y: 0, duration: 1, ease: 'none' }, 0)
+             .from('#bolsa .coin', { y: -400, opacity: 0, duration: 0.72, ease: 'power1.in', stagger: { each: 0.045 } }, 0)
+             .to(counter, { val: 42300, duration: 1, ease: 'none',
+                  onUpdate: () => { if (numEl) numEl.textContent = '$' + Math.round(counter.val).toLocaleString('en-US'); } }, 0);
+        }
+        const ecg = document.getElementById('ecg');
+        if (document.getElementById('latido') && ecg) {
+          const len = ecg.getTotalLength();
+          gsap.set(ecg, { strokeDasharray: len, strokeDashoffset: len });
+          const tlH = gsap.timeline({ scrollTrigger: { trigger: '#latido', start: 'top top', end: '+=120%', pin: true, scrub: 1, anticipatePin: 1 } });
+          tlH.to(ecg, { strokeDashoffset: 0, duration: 1, ease: 'none' }, 0)
+             .to('#heart', { keyframes: [{ scale: 1.12 },{ scale: 1 },{ scale: 1.12 },{ scale: 1 },{ scale: 1.1 },{ scale: 1 }],
+                  duration: 0.78, ease: 'none', transformOrigin: '50% 50%' }, 0)
+             .fromTo('#flowdot', { x: 0, opacity: 0 }, { opacity: 1, duration: 0.05 }, 0.7)
+             .to('#flowdot', { x: 612, duration: 0.26, ease: 'power1.inOut' }, 0.72)
+             .to('#flowdot', { opacity: 0, duration: 0.05 }, 0.99)
+             .fromTo('#member', { opacity: 0.3 }, { opacity: 1, duration: 0.18 }, 0.84)
+             .fromTo('#glow', { scale: 0, opacity: 0, transformOrigin: '50% 50%' }, { scale: 1, opacity: 0.5, duration: 0.2 }, 0.84);
+        }
+      };
+      gsap.ticker.add(function first() { gsap.ticker.remove(first); build(); });
+    }
+  </script>
 </body>
 </html>
