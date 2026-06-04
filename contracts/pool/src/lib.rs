@@ -3,6 +3,7 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, contracterror, token,
     Address, Env, String, Vec,
 };
+use blend_mock::BlendMockClient;
 
 // ============================================================
 // Tipos de retorno
@@ -60,13 +61,15 @@ enum DataKey {
     TechoCobertura,
     MesesCarencia,
     Validadores,
-    Hospitals,      // Vec<Address> de hospitales en whitelist
+    Hospitals,       // Vec<Address> de hospitales en whitelist
+    YieldContract,   // Dirección del pool de Blend (o mock)
     Initialized,
     Member(Address),
     MemberCount,
     TotalReserve,
-    ClaimEntry(u32), // Claim almacenado por ID
-    ClaimCount,      // auto-incremento de IDs
+    YieldDeposited,  // Monto actualmente en Blend
+    ClaimEntry(u32),
+    ClaimCount,
 }
 
 // ============================================================
@@ -91,6 +94,9 @@ pub enum Error {
     ClaimNotApproved    = 10,
     TriggerNotMet       = 11,
     InsufficientFunds   = 12,
+    // Fase 4 — yield
+    NotAdmin            = 13,
+    YieldContractNotSet = 14,
 }
 
 // 2 de 3 validadores para aprobar
@@ -129,6 +135,7 @@ impl PoolContract {
         meses_carencia: u32,
         validadores: Vec<Address>,
         hospitales: Vec<Address>,
+        yield_contract: Address,   // Blend real o blend-mock
     ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Initialized) {
             return Err(Error::AlreadyInitialized);
@@ -142,9 +149,11 @@ impl PoolContract {
         s.set(&DataKey::MesesCarencia,  &meses_carencia);
         s.set(&DataKey::Validadores,    &validadores);
         s.set(&DataKey::Hospitals,      &hospitales);
+        s.set(&DataKey::YieldContract,  &yield_contract);
         s.set(&DataKey::Initialized,    &true);
         s.set(&DataKey::MemberCount,    &0u32);
         s.set(&DataKey::TotalReserve,   &0i128);
+        s.set(&DataKey::YieldDeposited, &0i128);
         s.set(&DataKey::ClaimCount,     &0u32);
 
         Ok(())
@@ -221,14 +230,83 @@ impl PoolContract {
     /// Devuelve el estado agregado del pool.
     pub fn get_pool_status(env: Env) -> PoolStatus {
         let s = env.storage().instance();
-        let total_reserve: i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
-        let member_count: u32   = s.get(&DataKey::MemberCount).unwrap_or(0);
+        let total_reserve: i128  = s.get(&DataKey::TotalReserve).unwrap_or(0);
+        let yield_deposited: i128 = s.get(&DataKey::YieldDeposited).unwrap_or(0);
+        let member_count: u32    = s.get(&DataKey::MemberCount).unwrap_or(0);
         PoolStatus {
             total_reserve,
-            yield_amount: 0,
+            yield_amount: yield_deposited,
             member_count,
-            available: total_reserve,
+            available: total_reserve.saturating_sub(yield_deposited),
         }
+    }
+
+    // ====================================================
+    // Fase 4 — Integración de yield (Blend / mock)
+    // ====================================================
+
+    /// Deposita `monto` de la reserva en el pool de Blend.
+    /// Solo puede llamarla el admin. Hace cross-contract call a Blend.
+    pub fn deposit_to_yield(env: Env, monto: i128) -> Result<(), Error> {
+        if monto <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let s = env.storage().instance();
+        let admin: Address = s.get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+
+        let total_reserve: i128  = s.get(&DataKey::TotalReserve).unwrap_or(0);
+        let yield_dep: i128      = s.get(&DataKey::YieldDeposited).unwrap_or(0);
+        let available = total_reserve.saturating_sub(yield_dep);
+
+        if monto > available {
+            return Err(Error::InsufficientFunds);
+        }
+
+        let blend_addr: Address = s.get(&DataKey::YieldContract)
+            .ok_or(Error::YieldContractNotSet)?;
+
+        // Cross-contract call: pool → Blend.deposit(pool_address, monto)
+        let pool_addr = env.current_contract_address();
+        BlendMockClient::new(&env, &blend_addr).deposit(&pool_addr, &monto);
+
+        s.set(&DataKey::YieldDeposited, &(yield_dep + monto));
+
+        Ok(())
+    }
+
+    /// Retira `monto` del pool de Blend de vuelta a la reserva.
+    /// Devuelve el monto efectivamente recibido (incluye intereses).
+    /// Solo puede llamarla el admin.
+    pub fn withdraw_from_yield(env: Env, monto: i128) -> Result<i128, Error> {
+        if monto <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let s = env.storage().instance();
+        let admin: Address = s.get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+
+        let yield_dep: i128 = s.get(&DataKey::YieldDeposited).unwrap_or(0);
+        if monto > yield_dep {
+            return Err(Error::InsufficientFunds);
+        }
+
+        let blend_addr: Address = s.get(&DataKey::YieldContract)
+            .ok_or(Error::YieldContractNotSet)?;
+
+        // Cross-contract call: pool → Blend.withdraw(pool_address, monto)
+        let pool_addr = env.current_contract_address();
+        let received  = BlendMockClient::new(&env, &blend_addr).withdraw(&pool_addr, &monto);
+
+        // El interés ganado (received - monto) se acredita a la reserva total
+        let interest = received.saturating_sub(monto);
+        let reserve: i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
+        s.set(&DataKey::TotalReserve,   &(reserve + interest));
+        s.set(&DataKey::YieldDeposited, &(yield_dep - monto));
+
+        Ok(received)
     }
 
     // ====================================================
@@ -415,6 +493,7 @@ impl PoolContract {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blend_mock::BlendMock;
     use soroban_sdk::{
         testutils::{Address as _, Ledger},
         token::StellarAssetClient,
@@ -430,6 +509,8 @@ mod tests {
         env:    Env,
         pool:   Address,
         token:  Address,
+        blend:  Address,
+        admin:  Address,
         val1:   Address,
         val2:   Address,
         val3:   Address,
@@ -450,6 +531,7 @@ mod tests {
         let hosp3 = Address::generate(&env);
 
         let token = env.register_stellar_asset_contract_v2(admin.clone()).address();
+        let blend = env.register(BlendMock, ());   // mock de Blend
         let pool  = env.register(PoolContract, ());
 
         PoolContractClient::new(&env, &pool).init(
@@ -459,9 +541,10 @@ mod tests {
             &6u32,
             &vec![&env, val1.clone(), val2.clone(), val3.clone()],
             &vec![&env, hosp1.clone(), hosp2.clone(), hosp3.clone()],
+            &blend,
         );
 
-        Setup { env, pool, token, val1, val2, val3, hosp1, hosp2 }
+        Setup { env, pool, token, blend, admin, val1, val2, val3, hosp1, hosp2 }
     }
 
     fn mint(s: &Setup, to: &Address, amount: i128) {
@@ -777,5 +860,82 @@ mod tests {
 
         // El trigger paramétrico falla porque no pasaron 90 días
         assert!(client.try_execute_claim(&claim_id).is_err());
+    }
+
+    // ---- Tests de Fase 4 — yield ----
+
+    #[test]
+    fn test_deposit_to_yield_mueve_fondos() {
+        let s = setup();
+        let client = PoolContractClient::new(&s.env, &s.pool);
+        let user   = Address::generate(&s.env);
+
+        // Acumular fondos en el pool
+        client.join(&user);
+        mint(&s, &user, MONTO_MES * 6);
+        for _ in 0..6 { client.contribute(&user, &MONTO_MES); }
+
+        let depositar = MONTO_MES * 4; // depositar $72 de $108 en Blend
+        client.deposit_to_yield(&depositar);
+
+        let pool = client.get_pool_status();
+        assert_eq!(pool.yield_amount,  depositar);
+        assert_eq!(pool.total_reserve, MONTO_MES * 6);
+        assert_eq!(pool.available,     MONTO_MES * 2);  // $36 disponible
+    }
+
+    #[test]
+    fn test_withdraw_from_yield_recupera_con_interes() {
+        let s = setup();
+        let client = PoolContractClient::new(&s.env, &s.pool);
+        let user   = Address::generate(&s.env);
+
+        client.join(&user);
+        mint(&s, &user, MONTO_MES * 6);
+        for _ in 0..6 { client.contribute(&user, &MONTO_MES); }
+
+        let depositar = MONTO_MES * 4;
+        client.deposit_to_yield(&depositar);
+
+        // Retirar: blend-mock devuelve monto + 0.5 %
+        let recibido = client.withdraw_from_yield(&depositar);
+        let interes  = depositar / 200; // 0.5 %
+        assert_eq!(recibido, depositar + interes);
+
+        let pool = client.get_pool_status();
+        assert_eq!(pool.yield_amount,  0);                       // nada en blend
+        assert_eq!(pool.total_reserve, MONTO_MES * 6 + interes); // reserva creció
+        assert_eq!(pool.available,     MONTO_MES * 6 + interes);
+    }
+
+    #[test]
+    fn test_pool_status_refleja_yield_amount() {
+        let s = setup();
+        let client = PoolContractClient::new(&s.env, &s.pool);
+        let user   = Address::generate(&s.env);
+
+        client.join(&user);
+        mint(&s, &user, MONTO_MES * 6);
+        for _ in 0..6 { client.contribute(&user, &MONTO_MES); }
+
+        let pool_antes = client.get_pool_status();
+        assert_eq!(pool_antes.yield_amount, 0);
+        assert_eq!(pool_antes.available, MONTO_MES * 6);
+
+        client.deposit_to_yield(&(MONTO_MES * 3));
+
+        let pool_despues = client.get_pool_status();
+        assert_eq!(pool_despues.yield_amount,  MONTO_MES * 3);
+        assert_eq!(pool_despues.available,     MONTO_MES * 3);
+        assert_eq!(pool_despues.total_reserve, MONTO_MES * 6);
+    }
+
+    #[test]
+    fn test_deposit_to_yield_sin_fondos_suficientes() {
+        let s = setup();
+        let client = PoolContractClient::new(&s.env, &s.pool);
+
+        // Pool vacío — no hay fondos para depositar
+        assert!(client.try_deposit_to_yield(&MONTO_MES).is_err());
     }
 }

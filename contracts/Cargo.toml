@@ -1,5 +1,5 @@
 [workspace]
-members  = ["pool"]
+members  = ["pool", "blend-mock"]
 resolver = "2"
 
 [profile.release]
