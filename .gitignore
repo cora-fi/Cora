@@ -1,0 +1,18 @@
+# Rust / Soroban
+target/
+*.wasm
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Env
+.env
+*.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
