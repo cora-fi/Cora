@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es-CR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cora — Tu fondo mutual de salud</title>
+
+  <!-- Tipografía -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Iconos Phosphor -->
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css" />
+
+  <!-- Tokens del sistema de diseño -->
+  <link rel="stylesheet" href="app/tokens.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Config + capa de servicio (JS plano, único punto de datos) -->
+  <script src="app/config.js"></script>
+  <script src="app/service.js"></script>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- UI + pantallas (orden importa: primitivas primero) -->
+  <script type="text/babel" src="app/components.jsx"></script>
+  <script type="text/babel" src="app/hooks.jsx"></script>
+  <script type="text/babel" src="app/shell.jsx"></script>
+  <script type="text/babel" src="app/screen-onboarding.jsx"></script>
+  <script type="text/babel" src="app/screen-dashboard.jsx"></script>
+  <script type="text/babel" src="app/screen-aportar.jsx"></script>
+  <script type="text/babel" src="app/screen-cobertura.jsx"></script>
+  <script type="text/babel" src="app/screen-solicitar.jsx"></script>
+  <script type="text/babel" src="app/screen-solicitudes.jsx"></script>
+  <script type="text/babel" src="app/screen-fondo.jsx"></script>
+  <script type="text/babel" src="app/screen-validador.jsx"></script>
+  <script type="text/babel" src="app/app.jsx"></script>
+</body>
+</html>
