@@ -91,8 +91,16 @@ const _tsToDate = (ts) => new Date(Number(BigInt(ts.toString())) * 1000).toISOSt
 const _today    = () => new Date().toISOString().slice(0, 10);
 
 function _claimStatus(status, attestationsArr) {
-  const tag = typeof status === 'string' ? status
-    : (status?.tag ?? Object.keys(status ?? {})[0] ?? 'Pending');
+  // scValToNative codifica enums Soroban sin campos como ['VariantName'] (array)
+  let tag;
+  if (typeof status === 'string') {
+    tag = status;
+  } else if (Array.isArray(status)) {
+    tag = status[0];          // ['Approved'] → 'Approved'
+  } else {
+    tag = status?.tag ?? Object.keys(status ?? {})[0] ?? 'Pending';
+  }
+  console.debug('[_claimStatus] raw:', JSON.stringify(status), '→ tag:', tag);
   if (tag === 'Approved') return 'aprobado';
   if (tag === 'Executed') return 'pagado';
   if (tag === 'Rejected') return 'rechazado';
@@ -405,16 +413,20 @@ export async function attestClaim(_validador, claim_id, aprobar) {
   );
 
   const afterAttest = await getClaimStatus(claimN);
+  console.log('[attestClaim] status después de attest:', afterAttest.status,
+    '| attestations:', afterAttest.attestations);
 
   // Si el claim quedó aprobado, ejecutarlo para que los fondos lleguen al hospital
   if (afterAttest.status === 'aprobado') {
     try {
-      await _invokeWithKp(
+      console.log('[attestClaim] llamando execute_claim para claim:', claimN);
+      const result = await _invokeWithKp(
         poolCt.call('execute_claim', nativeToScVal(claimN, { type: 'u32' })),
         DEMO_VALIDATORS[0]
       );
+      console.log('[attestClaim] execute_claim resultado:', result?.status);
     } catch (e) {
-      console.error('execute_claim falló:', e);
+      console.error('[attestClaim] execute_claim falló:', e);
       throw e;
     }
   }
