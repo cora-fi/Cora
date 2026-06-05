@@ -32,10 +32,12 @@ const NET            = Networks.TESTNET;
 const STROOPS        = 10_000_000n;   // 1 token = 10^7 stroops
 // Cuenta pública siempre fondeada en testnet — usada para simulaciones anónimas
 const READ_SOURCE    = 'GD2CLTGOWRTH4HICC2BOI7V7BHATGJPNGWVRPQF2G36IO63GSZPRIAEV';
-// Validador de demo para testnet (SOLO TESTNET — no usar en mainnet)
-const DEMO_VAL_KP = Keypair.fromSecret(
-  import.meta.env.VITE_VALIDATOR_1_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUYQAAAAAAAAAAAAAAAAAAAAAAAAATR4'
-);
+// Validadores de demo para testnet (SOLO TESTNET — no usar en mainnet)
+const DEMO_VALIDATORS = [
+  Keypair.fromSecret(import.meta.env.VITE_VALIDATOR_1_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUYQAAAAAAAAAAAAAAAAAAAAAAAAATR4'),
+  Keypair.fromSecret(import.meta.env.VITE_VALIDATOR_2_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUZAAAAAAAAAAAAAAAAAAAAAAAAAA2AN'),
+  Keypair.fromSecret(import.meta.env.VITE_VALIDATOR_3_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUZQAAAAAAAAAAAAAAAAAAAAAAAABCQ5'),
+];
 
 const server = new Rpc.Server(RPC_URL);
 const poolCt = new Contract(POOL_CONTRACT);
@@ -379,18 +381,22 @@ export async function getClaimStatus(claim_id) {
 
 /**
  * attestClaim(validador, claim_id, aprobar)
- * Siempre firma con VITE_VALIDATOR_1_SECRET (SOLO TESTNET).
- * La wallet conectada identifica al usuario en el resto de la app
- * pero no se usa para firmar attestations.
+ * Rota entre los 3 validadores demo según las aprobaciones actuales del claim,
+ * para evitar que el contrato rechace un voto duplicado (SOLO TESTNET).
  */
 export async function attestClaim(_validador, claim_id, aprobar) {
   const claimN = Number(claim_id);
+
+  // Leer el estado actual para saber cuántas attestations hay
+  const current = await getClaimStatus(claimN);
+  const kp = DEMO_VALIDATORS[Math.min(current.attestations, DEMO_VALIDATORS.length - 1)];
+
   const op = poolCt.call(
     'attest_claim',
-    new Address(DEMO_VAL_KP.publicKey()).toScVal(),
+    new Address(kp.publicKey()).toScVal(),
     nativeToScVal(claimN, { type: 'u32' }),
     nativeToScVal(Boolean(aprobar), { type: 'bool' })
   );
-  await _invokeWithKp(op, DEMO_VAL_KP);
+  await _invokeWithKp(op, kp);
   return getClaimStatus(claimN);
 }
