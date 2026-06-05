@@ -8,7 +8,7 @@ export function CoraMark({ size = 26 }) {
       <img
         src={coraLogo}
         alt="Cora"
-        style={{ width: size * 1.15, height: size * 1.15, objectFit: 'contain' }}
+        style={{ width: size * 1.9, height: size * 1.9, objectFit: 'contain' }}
       />
       <span style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: size, color: 'var(--ink)', letterSpacing: '-.02em' }}>
         Cora
