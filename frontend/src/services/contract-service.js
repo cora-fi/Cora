@@ -327,6 +327,10 @@ export async function submitClaim({ member: address, referencia, fecha_referenci
 
   const fechaTs   = BigInt(Math.floor(new Date(fecha_referencia).getTime() / 1000));
   const montoSt   = _usdToStroops(Number(monto));
+  console.debug('[submitClaim] fecha_referencia input:', fecha_referencia,
+    '→ ts (s):', fechaTs.toString(),
+    '→ fecha legible:', new Date(Number(fechaTs) * 1000).toISOString(),
+    '| monto stroops:', montoSt.toString());
 
   const op = poolCt.call(
     'submit_claim',
@@ -409,7 +413,10 @@ export async function attestClaim(_validador, claim_id, aprobar) {
         poolCt.call('execute_claim', nativeToScVal(claimN, { type: 'u32' })),
         DEMO_VALIDATORS[0]
       );
-    } catch { /* TriggerNotMet u otro error — dejar en 'aprobado', no falla el flujo */ }
+    } catch (e) {
+      console.error('execute_claim falló:', e);
+      throw e;
+    }
   }
 
   return getClaimStatus(claimN);
