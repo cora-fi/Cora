@@ -381,22 +381,36 @@ export async function getClaimStatus(claim_id) {
 
 /**
  * attestClaim(validador, claim_id, aprobar)
- * Rota entre los 3 validadores demo según las aprobaciones actuales del claim,
- * para evitar que el contrato rechace un voto duplicado (SOLO TESTNET).
+ * Rota entre los 3 validadores demo según las aprobaciones actuales del claim.
+ * Si con esta aprobación se alcanza el quórum, ejecuta execute_claim automáticamente.
  */
 export async function attestClaim(_validador, claim_id, aprobar) {
   const claimN = Number(claim_id);
 
-  // Leer el estado actual para saber cuántas attestations hay
   const current = await getClaimStatus(claimN);
   const kp = DEMO_VALIDATORS[Math.min(current.attestations, DEMO_VALIDATORS.length - 1)];
 
-  const op = poolCt.call(
-    'attest_claim',
-    new Address(kp.publicKey()).toScVal(),
-    nativeToScVal(claimN, { type: 'u32' }),
-    nativeToScVal(Boolean(aprobar), { type: 'bool' })
+  await _invokeWithKp(
+    poolCt.call(
+      'attest_claim',
+      new Address(kp.publicKey()).toScVal(),
+      nativeToScVal(claimN, { type: 'u32' }),
+      nativeToScVal(Boolean(aprobar), { type: 'bool' })
+    ),
+    kp
   );
-  await _invokeWithKp(op, kp);
+
+  const afterAttest = await getClaimStatus(claimN);
+
+  // Si el claim quedó aprobado, ejecutarlo para que los fondos lleguen al hospital
+  if (afterAttest.status === 'aprobado') {
+    try {
+      await _invokeWithKp(
+        poolCt.call('execute_claim', nativeToScVal(claimN, { type: 'u32' })),
+        DEMO_VALIDATORS[0]
+      );
+    } catch { /* TriggerNotMet u otro error — dejar en 'aprobado', no falla el flujo */ }
+  }
+
   return getClaimStatus(claimN);
 }

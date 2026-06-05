@@ -62,6 +62,23 @@ export default function Solicitudes({ member, go }) {
                   </button>
                   {isOpen && (
                     <div style={{ padding: '0 var(--s3) var(--s3)', borderTop: '1px solid var(--hairline)' }}>
+                      {(c.status === 'pagado' || c.status === 'aprobado') && (
+                        <div style={{ margin: 'var(--s3) 0 var(--s2)', padding: '14px 18px',
+                          background: 'var(--forest-soft)', borderRadius: 'var(--r)',
+                          display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <Icon name="seal-check" size={22} weight="fill" color="var(--forest)" style={{ flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--forest-dark)', fontSize: 14.5 }}>
+                              {c.status === 'pagado' ? 'Fondos enviados al hospital' : 'Aprobado — pendiente de ejecución'}
+                            </div>
+                            <div style={{ fontSize: 13, color: 'var(--forest-dark)', opacity: .8, marginTop: 2 }}>
+                              {c.status === 'pagado'
+                                ? `${money(c.amount)} transferidos a ${c.hospital.nombre}`
+                                : 'El pago al hospital se procesará en breve.'}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       <div className="cora-claim-detail" style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 'var(--s4)', paddingTop: 'var(--s3)' }}>
                         <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
                           <DetailLine label="Días en lista de espera" value={`${c.days_waiting} días`} />

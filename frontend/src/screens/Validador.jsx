@@ -85,16 +85,18 @@ export default function Validador() {
                       borderTop: '1px solid var(--hairline)', borderBottom: '1px solid var(--hairline)', marginBottom: 16 }}>
                       <ChipFact icon="hourglass-high" label="En lista"      value={`${c.days_waiting} días`} flag={c.days_waiting > 180} />
                       <ChipFact icon="map-pin"        label="Ciudad"        value={c.hospital.ciudad} />
-                      <ChipFact icon="users-three"    label="Aprobaciones"  value={`${c.attestations} de ${c.attestations_needed}`} />
+                      <ChipFact icon="users-three"    label="Aprobaciones"  value={`${Math.min(c.attestations, c.attestations_needed)} de ${c.attestations_needed}`} />
                       <ChipFact icon="calendar-blank" label="Recibida"      value={fmtDate(c.date)} />
                     </div>
 
-                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                      <Button variant="danger" icon="x" loading={busy === c.claim_id + 'r'}
-                        onClick={() => attest(c, false)}>Rechazar</Button>
-                      <Button variant="primary" icon="check" loading={busy === c.claim_id + 'a'}
-                        onClick={() => attest(c, true)}>Aprobar caso</Button>
-                    </div>
+                    {c.attestations < c.attestations_needed && (
+                      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                        <Button variant="danger" icon="x" loading={busy === c.claim_id + 'r'}
+                          onClick={() => attest(c, false)}>Rechazar</Button>
+                        <Button variant="primary" icon="check" loading={busy === c.claim_id + 'a'}
+                          onClick={() => attest(c, true)}>Aprobar caso</Button>
+                      </div>
+                    )}
                   </Card>
                 ))}
               </div>
