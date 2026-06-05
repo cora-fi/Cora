@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Sidebar, BottomBar, MobileHeader } from './shell';
 import Onboarding  from './screens/Onboarding';
@@ -10,7 +10,7 @@ import Solicitudes from './screens/Solicitudes';
 import Fondo       from './screens/Fondo';
 import Validador   from './screens/Validador';
 import { connect, disconnect } from './services/wallet-service';
-import { getMember } from './services/mock-service';
+import { getMember } from './services/contract-service';
 
 const PRIVY_ENABLED = !!import.meta.env.VITE_PRIVY_APP_ID;
 
@@ -91,7 +91,7 @@ export default function App() {
   const common = { member, go };
   const screen = (() => {
     switch (route) {
-      case 'dashboard':   return <Dashboard {...common} />;
+      case 'dashboard':   return <Dashboard {...common} onMemberChange={setMember} />;
       case 'aportar':     return <Aportar member={member} onMemberChange={setMember} />;
       case 'cobertura':   return <Cobertura {...common} />;
       case 'solicitar':   return <Solicitar {...common} />;

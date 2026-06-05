@@ -1,7 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Rise, Card, Icon, Button, Badge, StateWrap, SectionTitle, money, fmtDate } from '../components';
 import { useAsync } from '../hooks';
-import { getClaims, attestClaim } from '../services/mock-service';
+import { getClaims, attestClaim } from '../services/contract-service';
 
 function ChipFact({ icon, label, value, flag }) {
   return (

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Rise, Card, Icon, Button, Field, inputStyle, StateWrap, Badge, money, fmtDate } from '../components';
 import { useAsync } from '../hooks';
 import { CoraConfig } from '../config';
-import { getContributions, contribute, getMember } from '../services/mock-service';
+import { getContributions, contribute, getMember } from '../services/contract-service';
 
 function ReviewRow({ label, value, last }) {
   return (

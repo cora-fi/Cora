@@ -1,7 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Rise, Card, Icon, Button, Badge, StateWrap, SectionTitle, money, fmtDate } from '../components';
 import { useAsync } from '../hooks';
-import { getClaims } from '../services/mock-service';
+import { getClaims } from '../services/contract-service';
 import { ClaimTimeline } from './Solicitar';
 
 function DetailLine({ label, value, mono }) {
@@ -13,8 +13,8 @@ function DetailLine({ label, value, mono }) {
   );
 }
 
-export default function Solicitudes({ go }) {
-  const claims = useAsync(() => getClaims(), []);
+export default function Solicitudes({ member, go }) {
+  const claims = useAsync(() => getClaims(member?.address), [member?.address]);
   const [open, setOpen] = useState(null);
 
   return (

@@ -1,7 +1,7 @@
-import { Rise, Card, Icon, Button, Badge, ProgressBar, StateWrap, SectionTitle, money, fmtDate } from '../components';
+﻿import { Rise, Card, Icon, Button, Badge, ProgressBar, StateWrap, SectionTitle, money, fmtDate } from '../components';
 import { useAsync } from '../hooks';
 import { CoraConfig } from '../config';
-import { getHospitals } from '../services/mock-service';
+import { getHospitals } from '../services/contract-service';
 
 function KeyFact({ icon, label, value }) {
   return (

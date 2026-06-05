@@ -1,8 +1,8 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Rise, Card, Icon, Button, Field, inputStyle, SectionTitle, Badge, ProgressBar, money } from '../components';
 import { useAsync } from '../hooks';
 import { CoraConfig } from '../config';
-import { getHospitals, submitClaim } from '../services/mock-service';
+import { getHospitals, submitClaim } from '../services/contract-service';
 
 const CLAIM_STEPS = [
   { key: 'enviado',       label: 'Enviado',            desc: 'Recibimos tu solicitud.',               icon: 'paper-plane-tilt' },

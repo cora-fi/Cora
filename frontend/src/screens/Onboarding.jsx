@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Icon, Button, Field, inputStyle } from '../components';
 import { CoraMark } from '../shell';
-import { login, getMember } from '../services/mock-service';
+import { login, getMember } from '../services/contract-service';
 import { connect, isFreighterAvailable } from '../services/wallet-service';
 
 const PRIVY_ENABLED = !!import.meta.env.VITE_PRIVY_APP_ID;

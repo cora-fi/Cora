@@ -1,6 +1,6 @@
-import { Rise, Card, Icon, Money, StateWrap, SectionTitle, useCountUp, money } from '../components';
+﻿import { Rise, Card, Icon, Money, StateWrap, SectionTitle, useCountUp, money } from '../components';
 import { useAsync } from '../hooks';
-import { getPoolStatus, getYieldStatus } from '../services/mock-service';
+import { getPoolStatus, getYieldStatus } from '../services/contract-service';
 
 function CompRow({ color, label, value, total }) {
   const pct = Math.round((value / total) * 100);

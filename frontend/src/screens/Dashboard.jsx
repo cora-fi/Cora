@@ -1,7 +1,8 @@
+﻿import { useState } from 'react';
 import { Rise, Card, Badge, Icon, Button, Money, ProgressBar, StateWrap, money } from '../components';
 import { useAsync } from '../hooks';
 import { CoraConfig } from '../config';
-import { getPoolStatus, getYieldStatus } from '../services/mock-service';
+import { getPoolStatus, getYieldStatus, join } from '../services/contract-service';
 
 function StatRow({ label, value, accent }) {
   return (
@@ -13,11 +14,58 @@ function StatRow({ label, value, accent }) {
   );
 }
 
-export default function Dashboard({ member, go }) {
+function JoinCard({ member, onJoined }) {
+  const [joining, setJoining] = useState(false);
+  const [err, setErr]         = useState('');
+
+  const doJoin = async () => {
+    setErr(''); setJoining(true);
+    try {
+      const updated = await join(member.address);
+      onJoined(updated);
+    } catch (e) {
+      setErr(e.message || 'No se pudo unir al fondo. Intentá de nuevo.');
+      setJoining(false);
+    }
+  };
+
+  return (
+    <Rise delay={0.06}>
+      <Card pad="var(--s5)" style={{ textAlign: 'center', maxWidth: 540, margin: '60px auto' }}>
+        <span style={{ width: 62, height: 62, borderRadius: 99, background: 'var(--forest-soft)',
+          display: 'grid', placeItems: 'center', margin: '0 auto 20px' }}>
+          <Icon name="users-three" size={30} color="var(--forest)" />
+        </span>
+        <h2 style={{ fontSize: 26, marginBottom: 10 }}>Unirte al fondo</h2>
+        <p style={{ color: 'var(--ink-2)', lineHeight: 1.6, maxWidth: 400, margin: '0 auto 24px' }}>
+          Tu dirección aún no está registrada. Al unirte empezás tu período de carencia
+          de 6 meses. No se cobra nada ahora.
+        </p>
+        {err && <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 14 }}>{err}</p>}
+        <Button size="lg" icon="arrow-right" loading={joining} onClick={doJoin}>
+          {joining ? 'Procesando…' : 'Unirme al fondo'}
+        </Button>
+        <p style={{ marginTop: 14, fontSize: 12, color: 'var(--ink-2)' }}>
+          Se firmará una transacción en Stellar Testnet. Sin costo de red.
+        </p>
+      </Card>
+    </Rise>
+  );
+}
+
+export default function Dashboard({ member, go, onMemberChange }) {
   const pool = useAsync(() => getPoolStatus(), []);
   const yld  = useAsync(() => getYieldStatus(), []);
   const cfg  = CoraConfig.product;
-  const restantes = Math.max(0, cfg.mesesCarencia - member.active_months);
+  const restantes = Math.max(0, cfg.mesesCarencia - (member.active_months ?? 0));
+
+  if (member.isNewMember) {
+    return (
+      <div style={{ maxWidth: 1080 }}>
+        <JoinCard member={member} onJoined={(updated) => onMemberChange?.(updated)} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 1080 }}>
