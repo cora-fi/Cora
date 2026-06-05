@@ -33,7 +33,9 @@ const STROOPS        = 10_000_000n;   // 1 token = 10^7 stroops
 // Cuenta pública siempre fondeada en testnet — usada para simulaciones anónimas
 const READ_SOURCE    = 'GD2CLTGOWRTH4HICC2BOI7V7BHATGJPNGWVRPQF2G36IO63GSZPRIAEV';
 // Validador de demo para testnet (SOLO TESTNET — no usar en mainnet)
-const DEMO_VAL_KP    = Keypair.fromSecret('SBRW64TBFV3GC3DJMRQXI33SFUYTAMBQGAYDAMBQGAYDAMBQGAYDBPPT');
+const DEMO_VAL_KP = Keypair.fromSecret(
+  import.meta.env.VITE_VALIDATOR_1_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUYQAAAAAAAAAAAAAAAAAAAAAAAAATR4'
+);
 
 const server = new Rpc.Server(RPC_URL);
 const poolCt = new Contract(POOL_CONTRACT);
