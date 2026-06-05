@@ -267,6 +267,33 @@ export async function getClaims(address) {
     .sort((a, b) => b.claim_id - a.claim_id);
 }
 
+/**
+ * getPendingClaims() — escanea el contrato directamente sin depender de localStorage.
+ *
+ * Los claim IDs son u32 secuenciales que empiezan en 1. Itera hasta obtener
+ * ClaimNotFound (error #7), lo que indica que no hay más claims. Devuelve
+ * todos los que tengan status 'enviado' o 'en_validacion', sin importar
+ * qué wallet los creó ni en qué sesión.
+ *
+ * Usado por la vista del validador para ver todas las solicitudes pendientes.
+ */
+export async function getPendingClaims() {
+  const pending = [];
+  for (let id = 1; id <= 200; id++) {   // cap de seguridad: 200 claims
+    try {
+      const claim = await getClaimStatus(id);
+      if (claim.status === 'enviado' || claim.status === 'en_validacion') {
+        pending.push(claim);
+      }
+    } catch (e) {
+      // Error #7 = ClaimNotFound → no hay más claims, terminar el scan
+      if (e.message.includes('#7') || e.message.includes('no encontrada')) break;
+      // Cualquier otro error en un ID concreto: saltar y seguir
+    }
+  }
+  return pending;
+}
+
 /** join(address) — registra al usuario como miembro (requiere firma) */
 export async function join(address) {
   await _invoke(poolCt.call('join', new Address(address).toScVal()), address);

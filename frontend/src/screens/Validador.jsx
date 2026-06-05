@@ -1,7 +1,7 @@
 ﻿import { useState } from 'react';
 import { Rise, Card, Icon, Button, Badge, StateWrap, SectionTitle, money, fmtDate } from '../components';
 import { useAsync } from '../hooks';
-import { getClaims, attestClaim } from '../services/contract-service';
+import { getPendingClaims, attestClaim } from '../services/contract-service';
 
 function ChipFact({ icon, label, value, flag }) {
   return (
@@ -16,7 +16,7 @@ function ChipFact({ icon, label, value, flag }) {
 }
 
 export default function Validador() {
-  const claims  = useAsync(() => getClaims(), []);
+  const claims  = useAsync(() => getPendingClaims(), []);
   const [busy, setBusy]   = useState(null);
   const [toast, setToast] = useState(null);
 
