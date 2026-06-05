@@ -379,33 +379,18 @@ export async function getClaimStatus(claim_id) {
 
 /**
  * attestClaim(validador, claim_id, aprobar)
- * Si el validador es null y el usuario conectado no es validador,
- * usa el validador-1 de demo (SOLO TESTNET).
+ * Siempre firma con VITE_VALIDATOR_1_SECRET (SOLO TESTNET).
+ * La wallet conectada identifica al usuario en el resto de la app
+ * pero no se usa para firmar attestations.
  */
-export async function attestClaim(validador, claim_id, aprobar) {
-  const callerAddress = validador ?? getAddress();
-  const claimN   = Number(claim_id);
-  const aprobaBool = Boolean(aprobar);
-
-  const buildOp = (addr) => poolCt.call(
+export async function attestClaim(_validador, claim_id, aprobar) {
+  const claimN = Number(claim_id);
+  const op = poolCt.call(
     'attest_claim',
-    new Address(addr).toScVal(),
+    new Address(DEMO_VAL_KP.publicKey()).toScVal(),
     nativeToScVal(claimN, { type: 'u32' }),
-    nativeToScVal(aprobaBool, { type: 'bool' })
+    nativeToScVal(Boolean(aprobar), { type: 'bool' })
   );
-
-  // Intenta con la wallet del usuario si está conectado y soporta firma Soroban.
-  // Cualquier fallo (no es validador, firma no soportada en Fase 5, etc.) cae al demo.
-  if (callerAddress) {
-    try {
-      await _invoke(buildOp(callerAddress), callerAddress);
-      return getClaimStatus(claimN);
-    } catch {
-      // fall through al demo validator
-    }
-  }
-
-  // Demo fallback — validador-1 de testnet (SOLO TESTNET)
-  await _invokeWithKp(buildOp(DEMO_VAL_KP.publicKey()), DEMO_VAL_KP);
+  await _invokeWithKp(op, DEMO_VAL_KP);
   return getClaimStatus(claimN);
 }
