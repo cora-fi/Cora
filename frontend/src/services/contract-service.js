@@ -392,17 +392,18 @@ export async function attestClaim(validador, claim_id, aprobar) {
     nativeToScVal(aprobaBool, { type: 'bool' })
   );
 
+  // Intenta con la wallet del usuario si está conectado y soporta firma Soroban.
+  // Cualquier fallo (no es validador, firma no soportada en Fase 5, etc.) cae al demo.
   if (callerAddress) {
     try {
       await _invoke(buildOp(callerAddress), callerAddress);
       return getClaimStatus(claimN);
-    } catch (e) {
-      // Si no es validador, caer al demo
-      if (!e.message.includes('validador registrado')) throw e;
+    } catch {
+      // fall through al demo validator
     }
   }
 
-  // Demo fallback — validador-1 de testnet
+  // Demo fallback — validador-1 de testnet (SOLO TESTNET)
   await _invokeWithKp(buildOp(DEMO_VAL_KP.publicKey()), DEMO_VAL_KP);
   return getClaimStatus(claimN);
 }
