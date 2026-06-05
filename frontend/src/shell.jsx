@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Icon } from './components';
+import coraLogo from './assets/CoraLogo.png';
 
-export function CoraMark({ size = 26, color = 'var(--forest)' }) {
+export function CoraMark({ size = 26 }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-      <svg width={size * 0.92} height={size * 0.92} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M2 13h4l2-5 3 9 2.5-7 1.6 3H22" stroke={color} strokeWidth="2"
-          strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <img
+        src={coraLogo}
+        alt="Cora"
+        style={{ width: size * 1.15, height: size * 1.15, objectFit: 'contain' }}
+      />
       <span style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: size, color: 'var(--ink)', letterSpacing: '-.02em' }}>
         Cora
       </span>

@@ -2,6 +2,7 @@
 import { usePrivy } from '@privy-io/react-auth';
 import { Icon, Button, Field, inputStyle } from '../components';
 import { CoraMark } from '../shell';
+import coraLogo from '../assets/CoraLogo.png';
 import { login, getMember } from '../services/contract-service';
 import { connect, isFreighterAvailable } from '../services/wallet-service';
 
@@ -65,7 +66,20 @@ export default function Onboarding({ onLogin }) {
 
         {/* panel editorial */}
         <div style={{ padding: 'clamp(28px, 5vw, 72px)', display: 'flex', flexDirection: 'column',
-          justifyContent: 'space-between', borderRight: '1px solid var(--hairline)', position: 'relative' }}>
+          justifyContent: 'space-between', borderRight: '1px solid var(--hairline)', position: 'relative',
+          overflow: 'hidden' }}>
+
+          {/* logo como fondo decorativo */}
+          <img
+            src={coraLogo}
+            aria-hidden="true"
+            style={{
+              position: 'absolute', right: '-80px', bottom: '-60px',
+              width: 'clamp(280px, 38vw, 460px)', opacity: 0.045,
+              pointerEvents: 'none', userSelect: 'none',
+            }}
+          />
+
           <div className="rise" style={{ animationDelay: '.02s' }}><CoraMark size={28} /></div>
 
           <div style={{ maxWidth: 520 }}>
