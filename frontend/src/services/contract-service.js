@@ -1,8 +1,7 @@
 /**
- * contract-service.js — capa de datos real que invoca los contratos Soroban.
- *
- * Misma interfaz que mock-service.js para que los componentes no cambien.
- * Token de prueba en testnet: XLM nativo (SAC siempre disponible en testnet).
+ * contract-service.js — capa de datos que invoca los contratos Soroban.
+ * Misma interfaz pública que mock-service.js.
+ * Token en testnet: XLM nativo via Stellar Asset Contract.
  */
 
 import { Buffer } from 'buffer';
@@ -17,22 +16,18 @@ import {
   nativeToScVal,
   scValToNative,
   Keypair,
-  xdr,
 } from '@stellar/stellar-sdk';
 import { getAddress, signTransaction } from './wallet-service';
 
-// ---------------------------------------------------------------------------
-// Configuración — toma valores del .env o usa los defaults de testnet
-// ---------------------------------------------------------------------------
-const POOL_CONTRACT  = import.meta.env.VITE_POOL_CONTRACT_ADDRESS
+const POOL_CONTRACT = import.meta.env.VITE_POOL_CONTRACT_ADDRESS
   ?? 'CCNJFLHICHXBCRYFKXDWCYLOLSWB66JHUYD53ZIUZCPJYW3NN23KQDUO';
-const RPC_URL        = import.meta.env.VITE_STELLAR_RPC_URL
+const RPC_URL = import.meta.env.VITE_STELLAR_RPC_URL
   ?? 'https://soroban-testnet.stellar.org';
-const NET            = Networks.TESTNET;
-const STROOPS        = 10_000_000n;   // 1 token = 10^7 stroops
-// Cuenta pública siempre fondeada en testnet — usada para simulaciones anónimas
-const READ_SOURCE    = 'GD2CLTGOWRTH4HICC2BOI7V7BHATGJPNGWVRPQF2G36IO63GSZPRIAEV';
-// Validadores de demo para testnet (SOLO TESTNET — no usar en mainnet)
+const NET     = Networks.TESTNET;
+const STROOPS = 10_000_000n;
+// Cuenta siempre fondeada en testnet; fuente de las simulaciones anónimas
+const READ_SOURCE = 'GD2CLTGOWRTH4HICC2BOI7V7BHATGJPNGWVRPQF2G36IO63GSZPRIAEV';
+// SOLO TESTNET — nunca incluir claves privadas reales aquí
 const DEMO_VALIDATORS = [
   Keypair.fromSecret(import.meta.env.VITE_VALIDATOR_1_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUYQAAAAAAAAAAAAAAAAAAAAAAAAATR4'),
   Keypair.fromSecret(import.meta.env.VITE_VALIDATOR_2_SECRET ?? 'SBRW64TBFV3GC3DJMRQXI33SFUZAAAAAAAAAAAAAAAAAAAAAAAAAA2AN'),
@@ -42,7 +37,6 @@ const DEMO_VALIDATORS = [
 const server = new Rpc.Server(RPC_URL);
 const poolCt = new Contract(POOL_CONTRACT);
 
-// Hospitales de la red (direcciones de la inicialización del contrato)
 const HOSPITALS = [
   { id: 'hsp_bib',   nombre: 'Clínica Bíblica',          ciudad: 'San José',
     address: import.meta.env.VITE_HOSPITAL_1 ?? 'GBINZTDEB3CMME4JJQ4NPBVG7E7ADL7PGSFUOXHLUGENP36QDVO4TY5K' },
@@ -54,9 +48,6 @@ const HOSPITALS = [
     address: import.meta.env.VITE_HOSPITAL_4 ?? 'GC4M6WOT3WTMGECPPZYUSCOYK3NIJV55IGVVSMCRWR2YTU5E7E35HWA4' },
 ];
 
-// ---------------------------------------------------------------------------
-// Errores del contrato → mensajes en español
-// ---------------------------------------------------------------------------
 const CONTRACT_ERRORS = {
   1:  'El contrato ya fue inicializado.',
   2:  'Ya sos miembro del fondo.',
@@ -81,84 +72,64 @@ function _parseErr(errStr) {
   return errStr ?? 'Error desconocido.';
 }
 
-// ---------------------------------------------------------------------------
-// Conversiones
-// ---------------------------------------------------------------------------
-const _toUsd  = (stroops) => Number(BigInt(stroops.toString()) / STROOPS);
-const _toStr  = (stroops) => _usdToStroops(Number(stroops));
+const _toUsd     = (stroops) => Number(BigInt(stroops.toString()) / STROOPS);
+const _tsToDate  = (ts) => new Date(Number(BigInt(ts.toString())) * 1000).toISOString().slice(0, 10);
+const _today     = () => new Date().toISOString().slice(0, 10);
 function _usdToStroops(usd) { return BigInt(Math.round(usd)) * STROOPS; }
-const _tsToDate = (ts) => new Date(Number(BigInt(ts.toString())) * 1000).toISOString().slice(0, 10);
-const _today    = () => new Date().toISOString().slice(0, 10);
 
 function _claimStatus(status, attestationsArr) {
-  // scValToNative codifica enums Soroban sin campos como ['VariantName'] (array)
+  // scValToNative codifica enums Soroban sin datos como ['VariantName'] (array de un elemento)
   let tag;
-  if (typeof status === 'string') {
-    tag = status;
-  } else if (Array.isArray(status)) {
-    tag = status[0];          // ['Approved'] → 'Approved'
-  } else {
-    tag = status?.tag ?? Object.keys(status ?? {})[0] ?? 'Pending';
-  }
-  console.debug('[_claimStatus] raw:', JSON.stringify(status), '→ tag:', tag);
+  if (typeof status === 'string')   tag = status;
+  else if (Array.isArray(status))   tag = status[0];
+  else                              tag = status?.tag ?? Object.keys(status ?? {})[0] ?? 'Pending';
+
   if (tag === 'Approved') return 'aprobado';
   if (tag === 'Executed') return 'pagado';
   if (tag === 'Rejected') return 'rechazado';
   return (attestationsArr?.length ?? 0) > 0 ? 'en_validacion' : 'enviado';
 }
 
-// ---------------------------------------------------------------------------
-// RPC helpers
-// ---------------------------------------------------------------------------
 async function _getAccount(address) {
   try   { return await server.getAccount(address); }
   catch { return server.getAccount(READ_SOURCE); }
 }
 
-// Fondo via friendbot si la cuenta no existe (para cuentas Privy nuevas)
 async function _ensureFunded(address) {
   try { await server.getAccount(address); }
   catch {
     try {
       await fetch(`https://friendbot.stellar.org?addr=${address}`);
       await new Promise(r => setTimeout(r, 3000));
-    } catch { /* sin acceso a red - ignorar */ }
+    } catch { /* sin acceso a red */ }
   }
 }
 
-// Simula una operación y devuelve { sim, retval_native }
 async function _simulate(op, sourceAddress) {
   const acc = await _getAccount(sourceAddress ?? READ_SOURCE);
   const tx  = new TransactionBuilder(acc, { fee: '100', networkPassphrase: NET })
     .addOperation(op).setTimeout(30).build();
   const sim = await server.simulateTransaction(tx);
   if (Rpc.Api.isSimulationError(sim)) throw new Error(_parseErr(sim.error));
-  const retval = sim.result?.retval ? scValToNative(sim.result.retval) : null;
-  return { sim, tx, retval };
+  return { sim, tx, retval: sim.result?.retval ? scValToNative(sim.result.retval) : null };
 }
 
-// Simula → ensambla → firma (con wallet del usuario) → envía → espera confirmación
 async function _invoke(op, signerAddress) {
   await _ensureFunded(signerAddress);
   const acc = await server.getAccount(signerAddress);
   const tx  = new TransactionBuilder(acc, { fee: '500000', networkPassphrase: NET })
     .addOperation(op).setTimeout(60).build();
-
   const sim = await server.simulateTransaction(tx);
-  if (Rpc.Api.isSimulationError(sim)) throw new Error(_parseErr(sim.error));
+  if (Rpc.Api.isSimulationError(sim))  throw new Error(_parseErr(sim.error));
   if (Rpc.Api.isSimulationRestore(sim)) throw new Error('Se necesita restore del ledger. Contactá soporte.');
-
   const assembled = Rpc.assembleTransaction(tx, sim).build();
   const signedXdr = await signTransaction(assembled.toXDR());
   const signedTx  = TransactionBuilder.fromXDR(signedXdr, NET);
-
   const send = await server.sendTransaction(signedTx);
   if (send.status === 'ERROR') throw new Error(_parseErr(JSON.stringify(send.errorResult)));
-
   return _waitForTx(send.hash);
 }
 
-// Igual que _invoke pero firma con un Keypair local (validador demo en testnet)
 async function _invokeWithKp(op, kp) {
   await _ensureFunded(kp.publicKey());
   const acc = await server.getAccount(kp.publicKey());
@@ -178,42 +149,37 @@ async function _waitForTx(hash, msTimeout = 30000) {
   while (Date.now() < deadline) {
     const r = await server.getTransaction(hash);
     if (r.status === 'SUCCESS') return r;
-    if (r.status === 'FAILED') throw new Error('La transacción fue rechazada por la red.');
+    if (r.status === 'FAILED')  throw new Error('La transacción fue rechazada por la red.');
     await new Promise(res => setTimeout(res, 2000));
   }
   throw new Error('Tiempo de espera agotado (30 s). Verificá en Stellar Expert si la tx fue confirmada.');
 }
 
-// ---------------------------------------------------------------------------
-// LocalStorage — historial local (contribuciones y claim IDs por dirección)
-// ---------------------------------------------------------------------------
 const _lsContribs = (a) => `cora_c_${a}`;
 const _lsClaims   = (a) => `cora_q_${a}`;
 
 function _loadList(key) {
   try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
 }
-
 function _prependItem(key, item) {
   localStorage.setItem(key, JSON.stringify([item, ..._loadList(key).slice(0, 99)]));
 }
-
 function _addUnique(key, value) {
   const list = _loadList(key);
   if (!list.includes(value)) localStorage.setItem(key, JSON.stringify([value, ...list]));
 }
 
 // ---------------------------------------------------------------------------
-// API pública — misma interfaz que mock-service.js
+// API pública
 // ---------------------------------------------------------------------------
 
-/** login() — compatibilidad con modo mock cuando Privy no está configurado */
+/** login() — stub para modo mock cuando Privy no está configurado */
 export async function login() {
   return { address: 'GBXYZ_DEMO', nombre: 'Demo Cora', join_date: _today(),
     total_contributed: 0, active_months: 0, is_eligible: false };
 }
 
-/** getMember(address) — lee datos reales del contrato. Si no es miembro, isNewMember: true */
+/** getMember(address) — si la dirección no está registrada devuelve isNewMember: true */
 export async function getMember(address) {
   if (!address) return { isNewMember: true, address: '', nombre: '', join_date: '',
     total_contributed: 0, active_months: 0, is_eligible: false };
@@ -239,7 +205,6 @@ export async function getMember(address) {
   }
 }
 
-/** getPoolStatus() — estado del fondo en tiempo real */
 export async function getPoolStatus() {
   const { retval: s } = await _simulate(poolCt.call('get_pool_status'));
   const total_reserve = _toUsd(s.total_reserve);
@@ -254,23 +219,19 @@ export async function getPoolStatus() {
   };
 }
 
-/** getYieldStatus() — derivado del pool status */
 export async function getYieldStatus() {
   const p = await getPoolStatus();
   return { yield_placed: p.yield_placed, yield_amount: p.yield_amount, apy_approx: 0 };
 }
 
-/** getHospitals() — lista estática, direcciones configuradas en init del contrato */
 export async function getHospitals() {
   return HOSPITALS.map(({ id, nombre, ciudad }) => ({ id, nombre, ciudad }));
 }
 
-/** getContributions(address) — historial en localStorage */
 export async function getContributions(address) {
   return _loadList(_lsContribs(address));
 }
 
-/** getClaims(address) — IDs en localStorage, datos del contrato */
 export async function getClaims(address) {
   const ids = _loadList(_lsClaims(address));
   if (!ids.length) return [];
@@ -280,44 +241,32 @@ export async function getClaims(address) {
 }
 
 /**
- * getPendingClaims() — escanea el contrato directamente sin depender de localStorage.
- *
- * Los claim IDs son u32 secuenciales que empiezan en 1. Itera hasta obtener
- * ClaimNotFound (error #7), lo que indica que no hay más claims. Devuelve
- * todos los que tengan status 'enviado' o 'en_validacion', sin importar
- * qué wallet los creó ni en qué sesión.
- *
- * Usado por la vista del validador para ver todas las solicitudes pendientes.
+ * Escanea el contrato directamente para listar todos los claims pendientes.
+ * Los IDs son u32 secuenciales desde 1; itera hasta ClaimNotFound (error #7).
+ * Necesario para la vista del validador, que opera en una sesión distinta a la del miembro.
  */
 export async function getPendingClaims() {
   const pending = [];
-  for (let id = 1; id <= 200; id++) {   // cap de seguridad: 200 claims
+  for (let id = 1; id <= 200; id++) {
     try {
       const claim = await getClaimStatus(id);
-      if (claim.status === 'enviado' || claim.status === 'en_validacion') {
-        pending.push(claim);
-      }
+      if (claim.status === 'enviado' || claim.status === 'en_validacion') pending.push(claim);
     } catch (e) {
-      // Error #7 = ClaimNotFound → no hay más claims, terminar el scan
       if (e.message.includes('#7') || e.message.includes('no encontrada')) break;
-      // Cualquier otro error en un ID concreto: saltar y seguir
     }
   }
   return pending;
 }
 
-/** join(address) — registra al usuario como miembro (requiere firma) */
 export async function join(address) {
   await _invoke(poolCt.call('join', new Address(address).toScVal()), address);
   return getMember(address);
 }
 
-/** contribute(address, monto) — aporta al fondo en XLM/USDC (requiere firma) */
 export async function contribute(address, monto) {
-  const montoUsd    = Number(monto);
-  const montoSt     = _usdToStroops(montoUsd);
+  const montoUsd = Number(monto);
   await _invoke(
-    poolCt.call('contribute', new Address(address).toScVal(), nativeToScVal(montoSt, { type: 'i128' })),
+    poolCt.call('contribute', new Address(address).toScVal(), nativeToScVal(_usdToStroops(montoUsd), { type: 'i128' })),
     address
   );
   const contrib = { id: `tx_${Date.now().toString(16)}`, date: _today(), amount: montoUsd, status: 'confirmado' };
@@ -326,19 +275,15 @@ export async function contribute(address, monto) {
 }
 
 /**
- * submitClaim({ member, referencia, fecha_referencia, hospital, monto })
- * Simula primero para obtener el claim_id, luego invoca.
+ * submitClaim — simula primero para capturar el claim_id retornado por el contrato,
+ * luego envía la transacción firmada.
  */
 export async function submitClaim({ member: address, referencia, fecha_referencia, hospital: hospitalId, monto }) {
   const hosp = HOSPITALS.find(h => h.id === hospitalId);
   if (!hosp) throw new Error(`Hospital '${hospitalId}' no está en la red de Cora.`);
 
-  const fechaTs   = BigInt(Math.floor(new Date(fecha_referencia).getTime() / 1000));
-  const montoSt   = _usdToStroops(Number(monto));
-  console.debug('[submitClaim] fecha_referencia input:', fecha_referencia,
-    '→ ts (s):', fechaTs.toString(),
-    '→ fecha legible:', new Date(Number(fechaTs) * 1000).toISOString(),
-    '| monto stroops:', montoSt.toString());
+  const fechaTs  = BigInt(Math.floor(new Date(fecha_referencia).getTime() / 1000));
+  const montoSt  = _usdToStroops(Number(monto));
 
   const op = poolCt.call(
     'submit_claim',
@@ -349,20 +294,18 @@ export async function submitClaim({ member: address, referencia, fecha_referenci
     nativeToScVal(montoSt, { type: 'i128' })
   );
 
-  // Simula para obtener el claim_id antes de firmar
   const { retval: claimIdRaw } = await _simulate(op, address);
   const claim_id = Number(claimIdRaw ?? 0) || (Date.now() % 100000);
 
   await _invoke(op, address);
   _addUnique(_lsClaims(address), claim_id);
 
-  const days_waiting = Math.round((Date.now() - new Date(fecha_referencia).getTime()) / 86400000);
   return {
     claim_id,
     date:               _today(),
     hospital:           { id: hosp.id, nombre: hosp.nombre, ciudad: hosp.ciudad },
     amount:             Number(monto),
-    days_waiting,
+    days_waiting:       Math.round((Date.now() - new Date(fecha_referencia).getTime()) / 86400000),
     referencia,
     status:             'enviado',
     attestations:       0,
@@ -370,12 +313,11 @@ export async function submitClaim({ member: address, referencia, fecha_referenci
   };
 }
 
-/** getClaimStatus(claim_id) — estado real del claim en el contrato */
 export async function getClaimStatus(claim_id) {
   const { retval: c } = await _simulate(
     poolCt.call('get_claim', nativeToScVal(Number(claim_id), { type: 'u32' }))
   );
-  const hosp = HOSPITALS.find(h => h.address === c.hospital)
+  const hosp   = HOSPITALS.find(h => h.address === c.hospital)
     ?? { id: 'hsp_unknown', nombre: String(c.hospital).slice(0, 8) ?? '—', ciudad: '' };
   const attArr = Array.isArray(c.attestations) ? c.attestations : [];
   return {
@@ -392,13 +334,13 @@ export async function getClaimStatus(claim_id) {
 }
 
 /**
- * attestClaim(validador, claim_id, aprobar)
- * Rota entre los 3 validadores demo según las aprobaciones actuales del claim.
- * Si con esta aprobación se alcanza el quórum, ejecuta execute_claim automáticamente.
+ * attestClaim — rota entre los 3 validadores demo según las aprobaciones ya registradas,
+ * para evitar votos duplicados del mismo validador. Si el claim queda aprobado tras este
+ * voto, llama execute_claim automáticamente para que los fondos lleguen al hospital.
+ * SOLO TESTNET — en producción cada validador firmaría con su propia wallet.
  */
 export async function attestClaim(_validador, claim_id, aprobar) {
   const claimN = Number(claim_id);
-
   const current = await getClaimStatus(claimN);
   const kp = DEMO_VALIDATORS[Math.min(current.attestations, DEMO_VALIDATORS.length - 1)];
 
@@ -413,22 +355,12 @@ export async function attestClaim(_validador, claim_id, aprobar) {
   );
 
   const afterAttest = await getClaimStatus(claimN);
-  console.log('[attestClaim] status después de attest:', afterAttest.status,
-    '| attestations:', afterAttest.attestations);
 
-  // Si el claim quedó aprobado, ejecutarlo para que los fondos lleguen al hospital
   if (afterAttest.status === 'aprobado') {
-    try {
-      console.log('[attestClaim] llamando execute_claim para claim:', claimN);
-      const result = await _invokeWithKp(
-        poolCt.call('execute_claim', nativeToScVal(claimN, { type: 'u32' })),
-        DEMO_VALIDATORS[0]
-      );
-      console.log('[attestClaim] execute_claim resultado:', result?.status);
-    } catch (e) {
-      console.error('[attestClaim] execute_claim falló:', e);
-      throw e;
-    }
+    await _invokeWithKp(
+      poolCt.call('execute_claim', nativeToScVal(claimN, { type: 'u32' })),
+      DEMO_VALIDATORS[0]
+    );
   }
 
   return getClaimStatus(claimN);

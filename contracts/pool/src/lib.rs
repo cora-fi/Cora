@@ -5,10 +5,6 @@ use soroban_sdk::{
 };
 use blend_mock::BlendMockClient;
 
-// ============================================================
-// Tipos de retorno
-// ============================================================
-
 #[contracttype]
 #[derive(Clone)]
 pub struct MemberInfo {
@@ -42,16 +38,12 @@ pub struct Claim {
     pub claim_id:         u32,
     pub miembro:          Address,
     pub referencia:       String,  // número de lista CCSS
-    pub fecha_referencia: u64,     // timestamp: cuándo entró a la lista
+    pub fecha_referencia: u64,     // unix timestamp (segundos): cuándo entró a la lista
     pub hospital:         Address,
     pub monto:            i128,
     pub status:           ClaimStatus,
-    pub attestations:     Vec<Address>, // validadores que aprobaron
+    pub attestations:     Vec<Address>,
 }
-
-// ============================================================
-// Almacenamiento
-// ============================================================
 
 #[contracttype]
 #[derive(Clone)]
@@ -61,31 +53,25 @@ enum DataKey {
     TechoCobertura,
     MesesCarencia,
     Validadores,
-    Hospitals,       // Vec<Address> de hospitales en whitelist
-    YieldContract,   // Dirección del pool de Blend (o mock)
+    Hospitals,
+    YieldContract,   // dirección del pool de Blend (o mock intercambiable)
     Initialized,
     Member(Address),
     MemberCount,
     TotalReserve,
-    YieldDeposited,  // Monto actualmente en Blend
+    YieldDeposited,  // monto actualmente depositado en Blend
     ClaimEntry(u32),
     ClaimCount,
 }
-
-// ============================================================
-// Errores
-// ============================================================
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    // Fase 2 — pool
     AlreadyInitialized  = 1,
     MemberAlreadyExists = 2,
     MemberNotFound      = 3,
     InvalidAmount       = 4,
-    // Fase 3 — claims
     NotEligible         = 5,
     HospitalNotInList   = 6,
     ClaimNotFound       = 7,
@@ -94,38 +80,26 @@ pub enum Error {
     ClaimNotApproved    = 10,
     TriggerNotMet       = 11,
     InsufficientFunds   = 12,
-    // Fase 4 — yield
     NotAdmin            = 13,
     YieldContractNotSet = 14,
 }
 
-// 2 de 3 validadores para aprobar
 const ATTESTATIONS_REQUIRED: u32 = 2;
-// 90 días expresados en segundos
-const DIAS_LISTA_REQUERIDOS: u64 = 90 * 24 * 60 * 60;
-
-// ============================================================
-// Helpers internos
-// ============================================================
+const DIAS_LISTA_REQUERIDOS: u64 = 90 * 24 * 60 * 60; // 90 días en segundos
 
 fn addr_in_vec(vec: &Vec<Address>, addr: &Address) -> bool {
     for a in vec.iter() {
-        if a == *addr {
-            return true;
-        }
+        if a == *addr { return true; }
     }
     false
 }
-
-// ============================================================
-// Contrato
-// ============================================================
 
 #[contract]
 pub struct PoolContract;
 
 #[contractimpl]
 impl PoolContract {
+
     /// Inicializa el contrato. Solo puede llamarse una vez.
     pub fn init(
         env: Env,
@@ -135,7 +109,7 @@ impl PoolContract {
         meses_carencia: u32,
         validadores: Vec<Address>,
         hospitales: Vec<Address>,
-        yield_contract: Address,   // Blend real o blend-mock
+        yield_contract: Address,
     ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Initialized) {
             return Err(Error::AlreadyInitialized);
@@ -155,11 +129,9 @@ impl PoolContract {
         s.set(&DataKey::TotalReserve,   &0i128);
         s.set(&DataKey::YieldDeposited, &0i128);
         s.set(&DataKey::ClaimCount,     &0u32);
-
         Ok(())
     }
 
-    /// Registra un nuevo miembro.
     pub fn join(env: Env, miembro: Address) -> Result<(), Error> {
         miembro.require_auth();
 
@@ -175,37 +147,27 @@ impl PoolContract {
             is_eligible:       false,
         });
 
-        let s = env.storage().instance();
+        let s     = env.storage().instance();
         let count: u32 = s.get(&DataKey::MemberCount).unwrap_or(0);
         s.set(&DataKey::MemberCount, &(count + 1));
-
         Ok(())
     }
 
-    /// Transfiere USDC del miembro al contrato y actualiza su estado.
     pub fn contribute(env: Env, miembro: Address, monto: i128) -> Result<(), Error> {
         miembro.require_auth();
 
-        if monto <= 0 {
-            return Err(Error::InvalidAmount);
-        }
+        if monto <= 0 { return Err(Error::InvalidAmount); }
 
         let key = DataKey::Member(miembro.clone());
-        let mut info: MemberInfo = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .ok_or(Error::MemberNotFound)?;
+        let mut info: MemberInfo = env.storage().persistent()
+            .get(&key).ok_or(Error::MemberNotFound)?;
 
         let token_id: Address = env.storage().instance().get(&DataKey::TokenUsdc).unwrap();
         token::Client::new(&env, &token_id)
             .transfer(&miembro, &env.current_contract_address(), &monto);
 
-        let meses_carencia: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::MesesCarencia)
-            .unwrap_or(6);
+        let meses_carencia: u32 = env.storage().instance()
+            .get(&DataKey::MesesCarencia).unwrap_or(6);
 
         info.total_contributed += monto;
         info.active_months     += 1;
@@ -215,24 +177,19 @@ impl PoolContract {
         let s = env.storage().instance();
         let reserve: i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
         s.set(&DataKey::TotalReserve, &(reserve + monto));
-
         Ok(())
     }
 
-    /// Devuelve información del miembro.
     pub fn get_member(env: Env, miembro: Address) -> Result<MemberInfo, Error> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Member(miembro))
-            .ok_or(Error::MemberNotFound)
+        env.storage().persistent()
+            .get(&DataKey::Member(miembro)).ok_or(Error::MemberNotFound)
     }
 
-    /// Devuelve el estado agregado del pool.
     pub fn get_pool_status(env: Env) -> PoolStatus {
         let s = env.storage().instance();
-        let total_reserve: i128  = s.get(&DataKey::TotalReserve).unwrap_or(0);
+        let total_reserve:   i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
         let yield_deposited: i128 = s.get(&DataKey::YieldDeposited).unwrap_or(0);
-        let member_count: u32    = s.get(&DataKey::MemberCount).unwrap_or(0);
+        let member_count:    u32  = s.get(&DataKey::MemberCount).unwrap_or(0);
         PoolStatus {
             total_reserve,
             yield_amount: yield_deposited,
@@ -241,80 +198,56 @@ impl PoolContract {
         }
     }
 
-    // ====================================================
-    // Fase 4 — Integración de yield (Blend / mock)
-    // ====================================================
-
-    /// Deposita `monto` de la reserva en el pool de Blend.
-    /// Solo puede llamarla el admin. Hace cross-contract call a Blend.
+    /// Deposita `monto` de la reserva en Blend. Solo el admin.
     pub fn deposit_to_yield(env: Env, monto: i128) -> Result<(), Error> {
-        if monto <= 0 {
-            return Err(Error::InvalidAmount);
-        }
+        if monto <= 0 { return Err(Error::InvalidAmount); }
 
-        let s = env.storage().instance();
+        let s      = env.storage().instance();
         let admin: Address = s.get(&DataKey::Admin).unwrap();
         admin.require_auth();
 
-        let total_reserve: i128  = s.get(&DataKey::TotalReserve).unwrap_or(0);
-        let yield_dep: i128      = s.get(&DataKey::YieldDeposited).unwrap_or(0);
-        let available = total_reserve.saturating_sub(yield_dep);
+        let total_reserve: i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
+        let yield_dep:     i128 = s.get(&DataKey::YieldDeposited).unwrap_or(0);
 
-        if monto > available {
+        if monto > total_reserve.saturating_sub(yield_dep) {
             return Err(Error::InsufficientFunds);
         }
 
         let blend_addr: Address = s.get(&DataKey::YieldContract)
             .ok_or(Error::YieldContractNotSet)?;
 
-        // Cross-contract call: pool → Blend.deposit(pool_address, monto)
         let pool_addr = env.current_contract_address();
         BlendMockClient::new(&env, &blend_addr).deposit(&pool_addr, &monto);
 
         s.set(&DataKey::YieldDeposited, &(yield_dep + monto));
-
         Ok(())
     }
 
-    /// Retira `monto` del pool de Blend de vuelta a la reserva.
-    /// Devuelve el monto efectivamente recibido (incluye intereses).
-    /// Solo puede llamarla el admin.
+    /// Retira `monto` de Blend. Devuelve el monto recibido (incluye intereses). Solo el admin.
     pub fn withdraw_from_yield(env: Env, monto: i128) -> Result<i128, Error> {
-        if monto <= 0 {
-            return Err(Error::InvalidAmount);
-        }
+        if monto <= 0 { return Err(Error::InvalidAmount); }
 
-        let s = env.storage().instance();
+        let s      = env.storage().instance();
         let admin: Address = s.get(&DataKey::Admin).unwrap();
         admin.require_auth();
 
         let yield_dep: i128 = s.get(&DataKey::YieldDeposited).unwrap_or(0);
-        if monto > yield_dep {
-            return Err(Error::InsufficientFunds);
-        }
+        if monto > yield_dep { return Err(Error::InsufficientFunds); }
 
         let blend_addr: Address = s.get(&DataKey::YieldContract)
             .ok_or(Error::YieldContractNotSet)?;
 
-        // Cross-contract call: pool → Blend.withdraw(pool_address, monto)
         let pool_addr = env.current_contract_address();
         let received  = BlendMockClient::new(&env, &blend_addr).withdraw(&pool_addr, &monto);
 
-        // El interés ganado (received - monto) se acredita a la reserva total
-        let interest = received.saturating_sub(monto);
+        // El interés (received - monto) se acredita a la reserva total
+        let interest  = received.saturating_sub(monto);
         let reserve: i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
         s.set(&DataKey::TotalReserve,   &(reserve + interest));
         s.set(&DataKey::YieldDeposited, &(yield_dep - monto));
-
         Ok(received)
     }
 
-    // ====================================================
-    // Fase 3 — Claims y validación multisig
-    // ====================================================
-
-    /// Envía una solicitud de cobertura. El miembro debe ser elegible
-    /// y el hospital debe estar en la whitelist.
     pub fn submit_claim(
         env: Env,
         miembro: Address,
@@ -325,34 +258,21 @@ impl PoolContract {
     ) -> Result<u32, Error> {
         miembro.require_auth();
 
-        // Verificar elegibilidad del miembro
-        let info: MemberInfo = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Member(miembro.clone()))
-            .ok_or(Error::MemberNotFound)?;
+        let info: MemberInfo = env.storage().persistent()
+            .get(&DataKey::Member(miembro.clone())).ok_or(Error::MemberNotFound)?;
 
-        if !info.is_eligible {
-            return Err(Error::NotEligible);
-        }
+        if !info.is_eligible { return Err(Error::NotEligible); }
 
-        // Verificar que el hospital esté en la whitelist
-        let hospitals: Vec<Address> = env
-            .storage()
-            .instance()
-            .get(&DataKey::Hospitals)
-            .unwrap();
+        let hospitals: Vec<Address> = env.storage().instance()
+            .get(&DataKey::Hospitals).unwrap();
 
-        if !addr_in_vec(&hospitals, &hospital) {
-            return Err(Error::HospitalNotInList);
-        }
+        if !addr_in_vec(&hospitals, &hospital) { return Err(Error::HospitalNotInList); }
 
-        // Crear claim con ID autoincremental
-        let s = env.storage().instance();
+        let s        = env.storage().instance();
         let count: u32 = s.get(&DataKey::ClaimCount).unwrap_or(0);
         let claim_id = count + 1;
 
-        let claim = Claim {
+        env.storage().persistent().set(&DataKey::ClaimEntry(claim_id), &Claim {
             claim_id,
             miembro,
             referencia,
@@ -361,16 +281,11 @@ impl PoolContract {
             monto,
             status:       ClaimStatus::Pending,
             attestations: Vec::new(&env),
-        };
-
-        env.storage().persistent().set(&DataKey::ClaimEntry(claim_id), &claim);
+        });
         s.set(&DataKey::ClaimCount, &claim_id);
-
         Ok(claim_id)
     }
 
-    /// Un validador vota para aprobar o rechazar un claim.
-    /// Error si el validador ya votó este claim.
     pub fn attest_claim(
         env: Env,
         validador: Address,
@@ -379,27 +294,15 @@ impl PoolContract {
     ) -> Result<ClaimStatus, Error> {
         validador.require_auth();
 
-        // Solo validadores registrados en init
-        let validadores: Vec<Address> = env
-            .storage()
-            .instance()
-            .get(&DataKey::Validadores)
-            .unwrap();
+        let validadores: Vec<Address> = env.storage().instance()
+            .get(&DataKey::Validadores).unwrap();
 
-        if !addr_in_vec(&validadores, &validador) {
-            return Err(Error::NotAValidator);
-        }
+        if !addr_in_vec(&validadores, &validador) { return Err(Error::NotAValidator); }
 
-        let mut claim: Claim = env
-            .storage()
-            .persistent()
-            .get(&DataKey::ClaimEntry(claim_id))
-            .ok_or(Error::ClaimNotFound)?;
+        let mut claim: Claim = env.storage().persistent()
+            .get(&DataKey::ClaimEntry(claim_id)).ok_or(Error::ClaimNotFound)?;
 
-        // Un validador solo puede votar una vez
-        if addr_in_vec(&claim.attestations, &validador) {
-            return Err(Error::AlreadyAttested);
-        }
+        if addr_in_vec(&claim.attestations, &validador) { return Err(Error::AlreadyAttested); }
 
         if !aprobar {
             claim.status = ClaimStatus::Rejected;
@@ -408,7 +311,6 @@ impl PoolContract {
         }
 
         claim.attestations.push_back(validador);
-
         if claim.attestations.len() >= ATTESTATIONS_REQUIRED {
             claim.status = ClaimStatus::Approved;
         }
@@ -417,78 +319,50 @@ impl PoolContract {
         Ok(claim.status.clone())
     }
 
-    /// Ejecuta un claim aprobado: verifica el disparador paramétrico
-    /// y transfiere los fondos directamente al hospital.
+    /// Ejecuta un claim aprobado. Verifica el disparador paramétrico:
+    /// (a) el miembro sigue siendo elegible y
+    /// (b) lleva al menos 90 días en lista de espera de la CCSS.
+    /// Los fondos se transfieren directamente al hospital — nunca al miembro.
     pub fn execute_claim(env: Env, claim_id: u32) -> Result<(), Error> {
-        let mut claim: Claim = env
-            .storage()
-            .persistent()
-            .get(&DataKey::ClaimEntry(claim_id))
-            .ok_or(Error::ClaimNotFound)?;
+        let mut claim: Claim = env.storage().persistent()
+            .get(&DataKey::ClaimEntry(claim_id)).ok_or(Error::ClaimNotFound)?;
 
-        // Solo se puede ejecutar si está aprobado
         if !matches!(claim.status, ClaimStatus::Approved) {
             return Err(Error::ClaimNotApproved);
         }
 
-        // Verificar disparador paramétrico
-        let info: MemberInfo = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Member(claim.miembro.clone()))
-            .ok_or(Error::MemberNotFound)?;
+        let info: MemberInfo = env.storage().persistent()
+            .get(&DataKey::Member(claim.miembro.clone())).ok_or(Error::MemberNotFound)?;
 
-        let meses_carencia: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::MesesCarencia)
-            .unwrap_or(6);
+        let meses_carencia: u32 = env.storage().instance()
+            .get(&DataKey::MesesCarencia).unwrap_or(6);
 
-        // (a) El miembro sigue siendo elegible
-        if info.active_months < meses_carencia {
-            return Err(Error::TriggerNotMet);
-        }
+        if info.active_months < meses_carencia { return Err(Error::TriggerNotMet); }
 
-        // (b) El miembro lleva >= 90 días en lista de espera
         let now = env.ledger().timestamp();
         if now < claim.fecha_referencia.saturating_add(DIAS_LISTA_REQUERIDOS) {
             return Err(Error::TriggerNotMet);
         }
 
-        // Verificar fondos suficientes en el pool
         let s = env.storage().instance();
         let reserve: i128 = s.get(&DataKey::TotalReserve).unwrap_or(0);
-        if reserve < claim.monto {
-            return Err(Error::InsufficientFunds);
-        }
+        if reserve < claim.monto { return Err(Error::InsufficientFunds); }
 
-        // Transferir USDC directamente al hospital (nunca al miembro)
         let token_id: Address = s.get(&DataKey::TokenUsdc).unwrap();
         token::Client::new(&env, &token_id)
             .transfer(&env.current_contract_address(), &claim.hospital, &claim.monto);
 
-        // Actualizar reserva del pool
         s.set(&DataKey::TotalReserve, &(reserve - claim.monto));
-
-        // Marcar como ejecutado
         claim.status = ClaimStatus::Executed;
         env.storage().persistent().set(&DataKey::ClaimEntry(claim_id), &claim);
-
         Ok(())
     }
 
-    /// Devuelve un claim por su ID.
     pub fn get_claim(env: Env, claim_id: u32) -> Result<Claim, Error> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::ClaimEntry(claim_id))
-            .ok_or(Error::ClaimNotFound)
+        env.storage().persistent()
+            .get(&DataKey::ClaimEntry(claim_id)).ok_or(Error::ClaimNotFound)
     }
 }
-
-// ============================================================
-// Tests
-// ============================================================
 
 #[cfg(test)]
 mod tests {
@@ -500,26 +374,24 @@ mod tests {
         vec, Env, String,
     };
 
-    const MONTO_MES: i128 = 18_0000000;     // $18 en stroops (7 dec)
-    const MONTO_CLAIM: i128 = 50_0000000;   // $5 en stroops — cabe dentro de 6×$18=$108
-
-    // ---- Setup ----
+    const MONTO_MES:   i128 = 18_0000000;   // $18 en stroops (7 decimales)
+    const MONTO_CLAIM: i128 = 50_0000000;   // $50 en stroops
 
     struct Setup {
-        env:    Env,
-        pool:   Address,
-        token:  Address,
-        blend:  Address,
-        admin:  Address,
-        val1:   Address,
-        val2:   Address,
-        val3:   Address,
-        hosp1:  Address,
-        hosp2:  Address,
+        env:   Env,
+        pool:  Address,
+        token: Address,
+        blend: Address,
+        admin: Address,
+        val1:  Address,
+        val2:  Address,
+        val3:  Address,
+        hosp1: Address,
+        hosp2: Address,
     }
 
     fn setup() -> Setup {
-        let env = Env::default();
+        let env   = Env::default();
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
@@ -531,7 +403,7 @@ mod tests {
         let hosp3 = Address::generate(&env);
 
         let token = env.register_stellar_asset_contract_v2(admin.clone()).address();
-        let blend = env.register(BlendMock, ());   // mock de Blend
+        let blend = env.register(BlendMock, ());
         let pool  = env.register(PoolContract, ());
 
         PoolContractClient::new(&env, &pool).init(
@@ -551,17 +423,12 @@ mod tests {
         StellarAssetClient::new(&s.env, &s.token).mint(to, &amount);
     }
 
-    /// Registra y hace elegible a un miembro (6 aportes).
     fn make_eligible(s: &Setup, user: &Address) {
         let client = PoolContractClient::new(&s.env, &s.pool);
         client.join(user);
         mint(s, user, MONTO_MES * 6);
-        for _ in 0..6 {
-            client.contribute(user, &MONTO_MES);
-        }
+        for _ in 0..6 { client.contribute(user, &MONTO_MES); }
     }
-
-    // ---- Tests de Fase 2 (regresión) ----
 
     #[test]
     fn test_join_exitoso() {
@@ -598,8 +465,8 @@ mod tests {
 
     #[test]
     fn test_contribute_sin_ser_miembro_devuelve_error() {
-        let s = setup();
-        let client  = PoolContractClient::new(&s.env, &s.pool);
+        let s      = setup();
+        let client = PoolContractClient::new(&s.env, &s.pool);
         let intruso = Address::generate(&s.env);
         mint(&s, &intruso, MONTO_MES);
         assert!(client.try_contribute(&intruso, &MONTO_MES).is_err());
@@ -607,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_elegibilidad_tras_carencia_completa() {
-        let s = setup();
+        let s    = setup();
         let user = Address::generate(&s.env);
         make_eligible(&s, &user);
         let info = PoolContractClient::new(&s.env, &s.pool).get_member(&user);
@@ -617,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_pool_status_refleja_multiples_miembros() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let u1 = Address::generate(&s.env);
         let u2 = Address::generate(&s.env);
@@ -630,11 +497,9 @@ mod tests {
         assert_eq!(pool.total_reserve, MONTO_MES * 2);
     }
 
-    // ---- Tests de Fase 3 — submit_claim ----
-
     #[test]
     fn test_submit_claim_exitoso() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
         make_eligible(&s, &user);
@@ -655,44 +520,38 @@ mod tests {
 
     #[test]
     fn test_submit_claim_miembro_no_elegible() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
-        client.join(&user); // sin completar carencia
-
-        let result = client.try_submit_claim(
+        client.join(&user);
+        assert!(client.try_submit_claim(
             &user,
             &String::from_str(&s.env, "CCSS-2024-002"),
             &1_700_000_000u64,
             &s.hosp1,
             &MONTO_CLAIM,
-        );
-        assert!(result.is_err());
+        ).is_err());
     }
 
     #[test]
     fn test_submit_claim_hospital_no_en_whitelist() {
-        let s = setup();
+        let s            = setup();
         let client       = PoolContractClient::new(&s.env, &s.pool);
         let user         = Address::generate(&s.env);
         let hosp_intruso = Address::generate(&s.env);
         make_eligible(&s, &user);
-
-        let result = client.try_submit_claim(
+        assert!(client.try_submit_claim(
             &user,
             &String::from_str(&s.env, "CCSS-2024-003"),
             &1_700_000_000u64,
             &hosp_intruso,
             &MONTO_CLAIM,
-        );
-        assert!(result.is_err());
+        ).is_err());
     }
-
-    // ---- Tests de Fase 3 — attest_claim ----
 
     #[test]
     fn test_attest_dos_aprobaciones_cambia_a_approved() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
         make_eligible(&s, &user);
@@ -707,14 +566,12 @@ mod tests {
 
         client.attest_claim(&s.val1, &claim_id, &true);
         let status = client.attest_claim(&s.val2, &claim_id, &true);
-
         assert!(matches!(status, ClaimStatus::Approved));
-        assert!(matches!(client.get_claim(&claim_id).status, ClaimStatus::Approved));
     }
 
     #[test]
     fn test_attest_rechazo_cambia_a_rejected() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
         make_eligible(&s, &user);
@@ -727,13 +584,12 @@ mod tests {
             &MONTO_CLAIM,
         );
 
-        let status = client.attest_claim(&s.val1, &claim_id, &false);
-        assert!(matches!(status, ClaimStatus::Rejected));
+        assert!(matches!(client.attest_claim(&s.val1, &claim_id, &false), ClaimStatus::Rejected));
     }
 
     #[test]
     fn test_attest_validador_duplicado_devuelve_error() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
         make_eligible(&s, &user);
@@ -747,16 +603,15 @@ mod tests {
         );
 
         client.attest_claim(&s.val1, &claim_id, &true);
-        // El mismo validador intenta votar de nuevo
         assert!(client.try_attest_claim(&s.val1, &claim_id, &true).is_err());
     }
 
     #[test]
     fn test_attest_no_validador_devuelve_error() {
-        let s = setup();
-        let client    = PoolContractClient::new(&s.env, &s.pool);
-        let user      = Address::generate(&s.env);
-        let impostor  = Address::generate(&s.env);
+        let s        = setup();
+        let client   = PoolContractClient::new(&s.env, &s.pool);
+        let user     = Address::generate(&s.env);
+        let impostor = Address::generate(&s.env);
         make_eligible(&s, &user);
 
         let claim_id = client.submit_claim(
@@ -770,20 +625,17 @@ mod tests {
         assert!(client.try_attest_claim(&impostor, &claim_id, &true).is_err());
     }
 
-    // ---- Tests de Fase 3 — execute_claim ----
-
     #[test]
     fn test_flujo_completo_submit_attest_execute() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
 
-        // Fijar tiempo base y hacer elegible al miembro
         let ahora: u64 = 1_760_000_000;
         s.env.ledger().with_mut(|l| l.timestamp = ahora);
         make_eligible(&s, &user);
 
-        // fecha_referencia = hace 100 días (> 90 días requeridos)
+        // fecha_referencia = hace 100 días (supera el umbral de 90 días)
         let fecha_ref = ahora - (100 * 24 * 60 * 60);
 
         let claim_id = client.submit_claim(
@@ -794,29 +646,24 @@ mod tests {
             &MONTO_CLAIM,
         );
 
-        // 2 validadores aprueban
         client.attest_claim(&s.val1, &claim_id, &true);
         client.attest_claim(&s.val2, &claim_id, &true);
-
-        // Ejecutar: fondos van directo al hospital
         client.execute_claim(&claim_id);
 
-        let claim = client.get_claim(&claim_id);
-        assert!(matches!(claim.status, ClaimStatus::Executed));
-
-        // El hospital recibió los fondos
-        let balance_hosp = soroban_sdk::token::Client::new(&s.env, &s.token)
-            .balance(&s.hosp1);
-        assert_eq!(balance_hosp, MONTO_CLAIM);
-
-        // La reserva del pool se redujo
-        let pool = client.get_pool_status();
-        assert_eq!(pool.total_reserve, MONTO_MES * 6 - MONTO_CLAIM);
+        assert!(matches!(client.get_claim(&claim_id).status, ClaimStatus::Executed));
+        assert_eq!(
+            soroban_sdk::token::Client::new(&s.env, &s.token).balance(&s.hosp1),
+            MONTO_CLAIM
+        );
+        assert_eq!(
+            client.get_pool_status().total_reserve,
+            MONTO_MES * 6 - MONTO_CLAIM
+        );
     }
 
     #[test]
     fn test_execute_claim_sin_aprobar_devuelve_error() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
         make_eligible(&s, &user);
@@ -829,14 +676,13 @@ mod tests {
             &MONTO_CLAIM,
         );
 
-        // Solo un validador vota — no llega a Approved
-        client.attest_claim(&s.val1, &claim_id, &true);
+        client.attest_claim(&s.val1, &claim_id, &true); // un solo voto, no alcanza
         assert!(client.try_execute_claim(&claim_id).is_err());
     }
 
     #[test]
     fn test_execute_claim_trigger_90_dias_no_cumplido() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
 
@@ -844,7 +690,7 @@ mod tests {
         s.env.ledger().with_mut(|l| l.timestamp = ahora);
         make_eligible(&s, &user);
 
-        // fecha_referencia = hace solo 30 días (< 90 requeridos)
+        // fecha_referencia = hace solo 30 días (no cumple los 90 requeridos)
         let fecha_ref = ahora - (30 * 24 * 60 * 60);
 
         let claim_id = client.submit_claim(
@@ -857,36 +703,12 @@ mod tests {
 
         client.attest_claim(&s.val1, &claim_id, &true);
         client.attest_claim(&s.val2, &claim_id, &true);
-
-        // El trigger paramétrico falla porque no pasaron 90 días
         assert!(client.try_execute_claim(&claim_id).is_err());
     }
 
-    // ---- Tests de Fase 4 — yield ----
-
     #[test]
     fn test_deposit_to_yield_mueve_fondos() {
-        let s = setup();
-        let client = PoolContractClient::new(&s.env, &s.pool);
-        let user   = Address::generate(&s.env);
-
-        // Acumular fondos en el pool
-        client.join(&user);
-        mint(&s, &user, MONTO_MES * 6);
-        for _ in 0..6 { client.contribute(&user, &MONTO_MES); }
-
-        let depositar = MONTO_MES * 4; // depositar $72 de $108 en Blend
-        client.deposit_to_yield(&depositar);
-
-        let pool = client.get_pool_status();
-        assert_eq!(pool.yield_amount,  depositar);
-        assert_eq!(pool.total_reserve, MONTO_MES * 6);
-        assert_eq!(pool.available,     MONTO_MES * 2);  // $36 disponible
-    }
-
-    #[test]
-    fn test_withdraw_from_yield_recupera_con_interes() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
 
@@ -897,20 +719,38 @@ mod tests {
         let depositar = MONTO_MES * 4;
         client.deposit_to_yield(&depositar);
 
-        // Retirar: blend-mock devuelve monto + 0.5 %
+        let pool = client.get_pool_status();
+        assert_eq!(pool.yield_amount,  depositar);
+        assert_eq!(pool.total_reserve, MONTO_MES * 6);
+        assert_eq!(pool.available,     MONTO_MES * 2);
+    }
+
+    #[test]
+    fn test_withdraw_from_yield_recupera_con_interes() {
+        let s      = setup();
+        let client = PoolContractClient::new(&s.env, &s.pool);
+        let user   = Address::generate(&s.env);
+
+        client.join(&user);
+        mint(&s, &user, MONTO_MES * 6);
+        for _ in 0..6 { client.contribute(&user, &MONTO_MES); }
+
+        let depositar = MONTO_MES * 4;
+        client.deposit_to_yield(&depositar);
+
+        // blend-mock devuelve monto + 0.5%
         let recibido = client.withdraw_from_yield(&depositar);
-        let interes  = depositar / 200; // 0.5 %
+        let interes  = depositar / 200;
         assert_eq!(recibido, depositar + interes);
 
         let pool = client.get_pool_status();
-        assert_eq!(pool.yield_amount,  0);                       // nada en blend
-        assert_eq!(pool.total_reserve, MONTO_MES * 6 + interes); // reserva creció
-        assert_eq!(pool.available,     MONTO_MES * 6 + interes);
+        assert_eq!(pool.yield_amount,  0);
+        assert_eq!(pool.total_reserve, MONTO_MES * 6 + interes);
     }
 
     #[test]
     fn test_pool_status_refleja_yield_amount() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
         let user   = Address::generate(&s.env);
 
@@ -924,18 +764,17 @@ mod tests {
 
         client.deposit_to_yield(&(MONTO_MES * 3));
 
-        let pool_despues = client.get_pool_status();
-        assert_eq!(pool_despues.yield_amount,  MONTO_MES * 3);
-        assert_eq!(pool_despues.available,     MONTO_MES * 3);
-        assert_eq!(pool_despues.total_reserve, MONTO_MES * 6);
+        let pool = client.get_pool_status();
+        assert_eq!(pool.yield_amount,  MONTO_MES * 3);
+        assert_eq!(pool.available,     MONTO_MES * 3);
+        assert_eq!(pool.total_reserve, MONTO_MES * 6);
     }
 
     #[test]
     fn test_deposit_to_yield_sin_fondos_suficientes() {
-        let s = setup();
+        let s      = setup();
         let client = PoolContractClient::new(&s.env, &s.pool);
-
-        // Pool vacío — no hay fondos para depositar
+        // pool vacío — no hay fondos para depositar
         assert!(client.try_deposit_to_yield(&MONTO_MES).is_err());
     }
 }
